@@ -1,0 +1,703 @@
+// ─── TELEGRAM WEBAPP INIT ─────────────────────────────────────────────────────
+const tg = window.Telegram.WebApp;
+tg.ready();
+tg.expand();
+
+// Set header color to match theme
+tg.setHeaderColor('#A855F7');
+tg.setBackgroundColor('#F8F7FF');
+
+const ADMIN_IDS = (window.__ADMIN_IDS__ || '').split(',').map(s => s.trim());
+const initData = tg.initData;
+const user = tg.initDataUnsafe?.user;
+
+// ─── AUTH CHECK ───────────────────────────────────────────────────────────────
+async function checkAuth() {
+  if (!user) {
+    showUnauthorized();
+    return;
+  }
+
+  try {
+    const res = await apiFetch('/api/admin/miniapp-auth', {
+      method: 'POST',
+      body: JSON.stringify({ initData }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      window._adminToken = data.token;
+      initApp();
+    } else {
+      showUnauthorized();
+    }
+  } catch (e) {
+    // Dev fallback: if server not reachable, use local check
+    console.warn('Auth server unreachable, using local check');
+    if (ADMIN_IDS.includes(String(user.id))) {
+      window._adminToken = 'dev-token';
+      initApp();
+    } else {
+      showUnauthorized();
+    }
+  }
+}
+
+function showUnauthorized() {
+  document.getElementById('loadingScreen').style.display = 'none';
+  document.getElementById('unauthorizedScreen').style.display = 'flex';
+}
+
+function initApp() {
+  document.getElementById('loadingScreen').style.display = 'none';
+  document.getElementById('mainApp').style.display = 'block';
+
+  // Greet
+  const name = user?.first_name || 'Admin';
+  document.getElementById('greetText').textContent = `Halo, ${name}! 👋`;
+
+  loadHome();
+}
+
+// ─── API HELPER ───────────────────────────────────────────────────────────────
+function apiFetch(path, opts = {}) {
+  return fetch(path, {
+    ...opts,
+    headers: {
+      'Content-Type': 'application/json',
+      'x-admin-token': window._adminToken || '',
+      'x-tg-init-data': initData || '',
+      ...(opts.headers || {}),
+    },
+  });
+}
+
+// ─── NAVIGATION ───────────────────────────────────────────────────────────────
+let currentTab = 'home';
+let allOrders = [];
+let currentFilter = 'all';
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(`tab-${tab}`).classList.add('active');
+  document.getElementById(`nav-${tab}`).classList.add('active');
+  currentTab = tab;
+
+  tg.BackButton.isVisible = false;
+
+  if (tab === 'home')     loadHome();
+  if (tab === 'orders')   loadOrders();
+  if (tab === 'stock')    loadStock();
+  if (tab === 'settings') loadPrices();
+}
+
+// ─── FORMAT HELPERS ───────────────────────────────────────────────────────────
+function rupiah(num) {
+  return 'Rp ' + Number(num).toLocaleString('id-ID');
+}
+
+function shortRupiah(num) {
+  if (num >= 1000000) return 'Rp ' + (num / 1000000).toFixed(1) + 'jt';
+  if (num >= 1000)    return 'Rp ' + (num / 1000).toFixed(0) + 'rb';
+  return 'Rp ' + num;
+}
+
+function timeAgo(timestamp) {
+  if (!timestamp) return '—';
+  const ts = timestamp._seconds ? timestamp._seconds * 1000 : new Date(timestamp).getTime();
+  const diff = Date.now() - ts;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'Baru saja';
+  if (mins < 60) return `${mins} mnt lalu`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} jam lalu`;
+  return `${Math.floor(hrs / 24)} hr lalu`;
+}
+
+function statusBadge(status) {
+  const map = {
+    pending:    ['⏳', 'pending', 'Pending'],
+    paid:       ['💳', 'paid', 'Paid'],
+    processing: ['⚙️', 'processing', 'Proses'],
+    done:       ['✅', 'done', 'Selesai'],
+    error:      ['❌', 'error', 'Error'],
+    out_of_stock: ['⚠️', 'error', 'Habis'],
+  };
+  const [icon, cls, label] = map[status] || ['❓', 'pending', status];
+  return `<span class="badge badge-${cls}">${icon} ${label}</span>`;
+}
+
+// ─── HOME ─────────────────────────────────────────────────────────────────────
+async function loadHome() {
+  try {
+    const res = await apiFetch('/api/admin/stats');
+    const { stats, stock } = await res.json();
+
+    document.getElementById('m-today-orders').textContent = stats.todayOrders;
+    document.getElementById('m-today-rev').textContent = shortRupiah(stats.todayRevenue);
+    document.getElementById('m-total-orders').textContent = stats.totalOrders;
+    document.getElementById('m-total-rev').textContent = shortRupiah(stats.totalRevenue);
+
+    // Stock
+    currentStockData = stock;
+    const stockEl = document.getElementById('homeStockList');
+    stockEl.innerHTML = stock.map((s, i) => stockItemHTML(s, i)).join('');
+
+  } catch (e) {
+    console.error('Load home error:', e);
+  }
+
+  // Recent orders
+  try {
+    const res = await apiFetch('/api/admin/orders');
+    const { orders } = await res.json();
+    allOrders = orders;
+
+    const pending = orders.filter(o => o.status === 'pending').length;
+    const badge = document.getElementById('pendingBadge');
+    if (pending > 0) {
+      badge.textContent = pending;
+      badge.style.display = 'block';
+    } else {
+      badge.style.display = 'none';
+    }
+
+    const homeOrderEl = document.getElementById('homeOrderList');
+    const recent = orders.slice(0, 5);
+    homeOrderEl.innerHTML = recent.length
+      ? recent.map(o => orderItemHTML(o)).join('')
+      : '<p style="text-align:center;color:#999;padding:1rem;">Belum ada order</p>';
+
+  } catch (e) {
+    console.error('Load orders error:', e);
+  }
+}
+
+let currentStockData = [];
+
+function stockItemHTML(s, index) {
+  const emoji = s.type === 'muda' ? '🧒' : '👴';
+  const color = s.count > 5 ? '#A855F7' : s.count > 0 ? '#f59e0b' : '#ef4444';
+  
+  return `<div class="stock-item" onclick="showStockModal(${index})" style="cursor:pointer; position:relative;">
+    <div class="stock-emoji">${emoji}</div>
+    <div class="stock-info">
+      <h4>${s.label}</h4>
+      <p>${s.count > 0 ? 'Tersedia' : 'Habis'}</p>
+    </div>
+    <div style="display:flex; flex-direction:column; align-items:flex-end; gap:0.4rem;">
+      <div class="stock-count" style="color:${color}; text-align:right;">${s.count}</div>
+      <button onclick="event.stopPropagation(); gotoRestock('${s.type}', ${s.garansi})" style="background:var(--primary); color:#fff; border:none; padding:4px 12px; border-radius:12px; font-size:0.7rem; font-weight:700; cursor:pointer; box-shadow:0 4px 12px rgba(168,85,247,0.3); transition:all 0.2s;">+ Restock</button>
+    </div>
+  </div>`;
+}
+
+function gotoRestock(type, garansi) {
+  switchTab('upload');
+  const typeBtn = document.getElementById(type === 'muda' ? 'seg-muda' : 'seg-tua');
+  const garBtn = document.getElementById(garansi ? 'seg-yes' : 'seg-no');
+  if (typeBtn) selectType(type, typeBtn);
+  if (garBtn) selectGaransi(garansi ? 'true' : 'false', garBtn);
+}
+
+function showStockModal(index) {
+  const s = currentStockData[index];
+  if (!s) return;
+  
+  document.getElementById('stockModalTitle').textContent = s.label;
+  document.getElementById('stockModalCount').textContent = s.count;
+  
+  const listEl = document.getElementById('stockFileList');
+  if (s.items && s.items.length > 0) {
+    listEl.innerHTML = s.items.map(i => `
+      <div style="background:rgba(255,255,255,0.05); padding:0.75rem; border-radius:8px; display:flex; justify-content:space-between; align-items:center;">
+        <span style="font-size:0.85rem; color:#fff; word-break:break-all;">📄 ${i.fileName}</span>
+        <span style="font-size:0.7rem; color:#999; white-space:nowrap; margin-left:0.5rem;">${timeAgo(i.createdAt)}</span>
+      </div>
+    `).join('');
+    
+    const btnDel = document.getElementById('btnDeleteStock');
+    btnDel.style.display = 'block';
+    btnDel.onclick = () => confirmDeleteStock(s.type, s.garansi, s.label);
+  } else {
+    listEl.innerHTML = '<p style="text-align:center; color:#999; font-size:0.9rem; margin-top:1rem;">Stok kosong.</p>';
+    document.getElementById('btnDeleteStock').style.display = 'none';
+  }
+  
+  document.getElementById('stockModal').style.display = 'flex';
+}
+
+function closeStockModal() {
+  document.getElementById('stockModal').style.display = 'none';
+}
+
+async function confirmDeleteStock(type, garansi, label) {
+  if (!confirm(`Yakin ingin MENGHAPUS SEMUA sisa stok untuk kategori:\n"${label}"?\n\nFile ZIP akan dihapus dari server dan tidak bisa dikembalikan!`)) return;
+  
+  closeStockModal();
+  showToast(`⏳ Menghapus stok ${label}...`);
+  
+  try {
+    const res = await apiFetch('/api/admin/stock', {
+      method: 'DELETE',
+      body: JSON.stringify({ type, garansi })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast('✅ Stok berhasil dihapus!');
+      loadHome();
+      loadStock();
+    } else {
+      showToast('❌ Gagal menghapus: ' + data.error);
+    }
+  } catch (e) {
+    showToast('❌ Terjadi kesalahan saat menghapus stok.');
+  }
+}
+
+async function loadStock() {
+  const el = document.getElementById('stockDetailList');
+  try {
+    const res = await apiFetch('/api/admin/stock');
+    const { stock } = await res.json();
+    currentStockData = stock;
+    el.innerHTML = stock.map((s, i) => stockItemHTML(s, i)).join('');
+  } catch {
+    el.innerHTML = '<p style="color:#ef4444;text-align:center;padding:1rem;">Gagal memuat stok.</p>';
+  }
+}
+
+// ─── ORDERS ───────────────────────────────────────────────────────────────────
+function orderItemHTML(order) {
+  const typeName = order.type === 'muda' ? '🧒 Muda' : '👴 Tua';
+  const garansiName = order.garansi ? '✅' : '❌';
+  return `<div class="order-item" onclick="showOrderDetail('${order.id}')">
+    <div class="order-item-top">
+      <span class="order-item-id">#${order.id.slice(0,8)}</span>
+      ${statusBadge(order.status)}
+    </div>
+    <div class="order-item-user">@${order.username || 'unknown'}</div>
+    <div class="order-item-product">${typeName} ${garansiName} — ${order.qty} akun</div>
+    <div class="order-item-bottom">
+      <span class="order-item-price">${rupiah(order.totalPrice)}</span>
+      <span style="font-size:.7rem;color:#999">${timeAgo(order.createdAt)}</span>
+    </div>
+  </div>`;
+}
+
+async function loadOrders() {
+  const el = document.getElementById('allOrderList');
+  try {
+    const res = await apiFetch('/api/admin/orders');
+    const { orders } = await res.json();
+    allOrders = orders;
+    renderFilteredOrders();
+  } catch {
+    el.innerHTML = '<p style="color:#ef4444;text-align:center;padding:1rem;">Gagal memuat order.</p>';
+  }
+}
+
+function renderFilteredOrders() {
+  const el = document.getElementById('allOrderList');
+  const filtered = currentFilter === 'all'
+    ? allOrders
+    : allOrders.filter(o => o.status === currentFilter);
+
+  el.innerHTML = filtered.length
+    ? filtered.map(o => orderItemHTML(o)).join('')
+    : '<p style="text-align:center;color:#999;padding:2rem;">Tidak ada order.</p>';
+}
+
+function filterOrders(filter, btn) {
+  currentFilter = filter;
+  document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+  btn.classList.add('active');
+  renderFilteredOrders();
+}
+
+// ─── ORDER DETAIL MODAL ───────────────────────────────────────────────────────
+function showOrderDetail(orderId) {
+  const order = allOrders.find(o => o.id === orderId);
+  if (!order) return;
+
+  const typeName = order.type === 'muda' ? '🧒 Akun Muda' : '👴 Akun Tua';
+  const garansiName = order.garansi ? '✅ Garansi' : '❌ No Garansi';
+
+  const canConfirm = order.status === 'pending' || order.status === 'paid';
+
+  document.getElementById('modalBody').innerHTML = `
+    <div class="modal-row">
+      <span class="modal-row-label">Order ID</span>
+      <span class="modal-row-val" style="font-family:monospace;font-size:.75rem">${order.id}</span>
+    </div>
+    <div class="modal-row">
+      <span class="modal-row-label">Pembeli</span>
+      <span class="modal-row-val">@${order.username || '—'}</span>
+    </div>
+    <div class="modal-row">
+      <span class="modal-row-label">Produk</span>
+      <span class="modal-row-val">${typeName} ${garansiName}</span>
+    </div>
+    <div class="modal-row">
+      <span class="modal-row-label">Jumlah</span>
+      <span class="modal-row-val">${order.qty} akun</span>
+    </div>
+    <div class="modal-row">
+      <span class="modal-row-label">Total</span>
+      <span class="modal-row-val" style="color:#A855F7">${rupiah(order.totalPrice)}</span>
+    </div>
+    <div class="modal-row">
+      <span class="modal-row-label">Status</span>
+      <span class="modal-row-val">${statusBadge(order.status)}</span>
+    </div>
+    <div class="modal-row">
+      <span class="modal-row-label">Waktu</span>
+      <span class="modal-row-val">${timeAgo(order.createdAt)}</span>
+    </div>
+    ${canConfirm ? `
+    <button class="btn-primary full" style="margin-top:1rem;" onclick="confirmOrder('${order.id}')">
+      ✅ Konfirmasi & Kirim Akun
+    </button>` : ''}
+  `;
+
+  document.getElementById('orderModal').style.display = 'flex';
+  tg.BackButton.show();
+  tg.BackButton.onClick(() => closeModal());
+}
+
+function closeModal(e) {
+  if (e && e.target !== document.getElementById('orderModal')) return;
+  document.getElementById('orderModal').style.display = 'none';
+  tg.BackButton.hide();
+}
+
+async function confirmOrder(orderId) {
+  tg.showConfirm('Konfirmasi order ini dan kirim akun ke pembeli?', async (confirmed) => {
+    if (!confirmed) return;
+
+    try {
+      const res = await apiFetch(`/api/admin/orders/${orderId}/confirm`, { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        showToast('✅ Dikonfirmasi! Akun sedang dikirim...');
+        closeModal();
+        setTimeout(() => loadOrders(), 1500);
+      } else {
+        showToast('❌ Gagal konfirmasi.');
+      }
+    } catch {
+      showToast('❌ Terjadi kesalahan.');
+    }
+  });
+}
+
+// ─── UPLOAD ───────────────────────────────────────────────────────────────────
+let selectedFiles = [];
+let selectedType = 'muda';
+let selectedGaransi = 'true';
+
+function selectType(val, btn) {
+  selectedType = val;
+  document.querySelectorAll('[id^="seg-muda"],[id^="seg-tua"]').forEach(b => {
+    if (b.id === 'seg-muda' || b.id === 'seg-tua') b.classList.remove('active');
+  });
+  btn.classList.add('active');
+}
+
+function selectGaransi(val, btn) {
+  selectedGaransi = val;
+  document.getElementById('seg-yes').classList.remove('active');
+  document.getElementById('seg-no').classList.remove('active');
+  btn.classList.add('active');
+}
+
+async function handleFiles(files) {
+  if (!files || files.length === 0) return;
+  
+  if (files.length === 1 && files[0].name.endsWith('.zip')) {
+    setOverlay('Mengekstrak ZIP...', 'Membaca struktur folder...', 0);
+    try {
+      const zip = new JSZip();
+      await zip.loadAsync(files[0]);
+      
+      const validPaths = Object.keys(zip.files).filter(p => !zip.files[p].dir && !p.includes('.DS_Store') && !p.includes('__MACOSX'));
+      
+      if (validPaths.length > 0) {
+        // Cari prefix (folder awal) yang sama di semua file
+        let commonPrefix = validPaths[0].includes('/') ? validPaths[0].substring(0, validPaths[0].lastIndexOf('/') + 1) : '';
+        for (let i = 1; i < validPaths.length; i++) {
+          while (commonPrefix !== '' && validPaths[i].indexOf(commonPrefix) !== 0) {
+            commonPrefix = commonPrefix.substring(0, commonPrefix.length - 1);
+            const lastSlash = commonPrefix.lastIndexOf('/');
+            commonPrefix = commonPrefix.substring(0, lastSlash + 1);
+          }
+        }
+        
+        const folders = {};
+        validPaths.forEach(path => {
+          const relPath = path.substring(commonPrefix.length);
+          const parts = relPath.split('/');
+          if (parts.length > 1) {
+            const folderName = parts[0];
+            if (!folders[folderName]) folders[folderName] = [];
+            folders[folderName].push({ 
+              originalPath: path, 
+              relPathInsideNewZip: parts.slice(1).join('/') 
+            });
+          }
+        });
+        
+        const folderNames = Object.keys(folders);
+        
+        // Jika ada lebih dari 1 folder unik, ini adalah Master ZIP!
+        if (folderNames.length > 1) {
+          selectedFiles = [];
+          let processed = 0;
+          
+          for (let folderName of folderNames) {
+            const newZip = new JSZip();
+            const items = folders[folderName];
+            
+            for (let item of items) {
+              const fileData = await zip.files[item.originalPath].async('blob');
+              newZip.file(item.relPathInsideNewZip, fileData);
+            }
+            
+            const newBlob = await newZip.generateAsync({ type: 'blob' });
+            selectedFiles.push(new File([newBlob], `${folderName}.zip`, { type: 'application/zip' }));
+            
+            processed++;
+            setOverlay('Memecah ZIP...', `Membuat ${processed} dari ${folderNames.length} akun...`, Math.round((processed / folderNames.length) * 100));
+          }
+          
+          hideOverlay();
+          renderFilePreview();
+          return;
+        }
+      }
+    } catch (e) {
+      console.error('Master ZIP error', e);
+    }
+    hideOverlay();
+  }
+  
+  selectedFiles = Array.from(files);
+  renderFilePreview();
+}
+
+function setOverlay(title, desc, percent) {
+  const ov = document.getElementById('loadingOverlay');
+  if (ov) {
+    ov.style.display = 'flex';
+    document.getElementById('loadingTitle').textContent = title;
+    document.getElementById('loadingDesc').textContent = desc;
+    document.getElementById('loadingProgBar').style.width = percent + '%';
+  }
+}
+
+function hideOverlay() {
+  const ov = document.getElementById('loadingOverlay');
+  if (ov) ov.style.display = 'none';
+}
+
+async function handleFolder(files) {
+  if (!files || !files.length) return;
+  
+  // Mobile / Direct File check
+  const isFlatFiles = !files[0].webkitRelativePath;
+  
+  if (isFlatFiles) {
+    // On mobile, they just pick files (like .zip or .txt). Treat each as a separate account file.
+    for (let file of files) {
+      selectedFiles.push(file);
+    }
+    renderFilePreview();
+    return;
+  }
+
+  const folders = {};
+  
+  let isSingleAccount = true;
+  for(let file of files) {
+    if (file.webkitRelativePath.split('/').length > 2) {
+      isSingleAccount = false;
+      break;
+    }
+  }
+
+  for(let file of files) {
+    const parts = file.webkitRelativePath.split('/');
+    if (isSingleAccount) {
+      const accountName = parts[0] || 'Unknown';
+      if (!folders[accountName]) folders[accountName] = [];
+      folders[accountName].push({ file: file, relativePath: parts.slice(1).join('/') });
+    } else {
+      if (parts.length >= 3) {
+        const accountName = parts[1];
+        if (!folders[accountName]) folders[accountName] = [];
+        folders[accountName].push({ file: file, relativePath: parts.slice(2).join('/') });
+      }
+    }
+  }
+
+  const accountNames = Object.keys(folders);
+  if (accountNames.length === 0) {
+    showToast('❌ Tidak ada folder akun yang valid!');
+    return;
+  }
+
+  setOverlay('Mengkompres ZIP', `Menyiapkan ${accountNames.length} folder...`, 0);
+  await new Promise(r => setTimeout(r, 50)); // let UI render
+  
+  const zipBlobs = [];
+  let processed = 0;
+  for (const accountName of accountNames) {
+    const zip = new window.JSZip();
+    folders[accountName].forEach(item => {
+      zip.file(item.relativePath, item.file);
+    });
+    const blob = await zip.generateAsync({type:"blob"});
+    const zipFile = new File([blob], `${accountName}.zip`, { type: "application/zip" });
+    zipBlobs.push(zipFile);
+    
+    processed++;
+    const pct = Math.floor((processed / accountNames.length) * 100);
+    setOverlay('Mengkompres ZIP', `Proses ${processed} dari ${accountNames.length} folder...`, pct);
+  }
+
+  selectedFiles = selectedFiles.concat(zipBlobs);
+  renderFilePreview();
+  hideOverlay();
+  showToast(`✅ ${zipBlobs.length} folder siap di-upload!`);
+  document.getElementById('folderInput').value = ''; // reset
+}
+
+function renderFilePreview() {
+  const preview = document.getElementById('filePreview');
+  const list = document.getElementById('fileList');
+  const count = document.getElementById('fileCount');
+
+  count.textContent = `${selectedFiles.length} file dipilih`;
+  list.innerHTML = selectedFiles.map((f, i) => `
+    <div class="file-item">
+      <span>📄 ${f.name}</span>
+      <button onclick="removeFile(${i})">✕</button>
+    </div>
+  `).join('');
+
+  preview.style.display = selectedFiles.length ? 'block' : 'none';
+}
+
+function removeFile(idx) {
+  selectedFiles.splice(idx, 1);
+  if (!selectedFiles.length) clearFiles();
+  else renderFilePreview();
+}
+
+function clearFiles() {
+  selectedFiles = [];
+  document.getElementById('fileInput').value = '';
+  document.getElementById('folderInput').value = '';
+  document.getElementById('filePreview').style.display = 'none';
+}
+
+async function doUpload() {
+  if (!selectedFiles.length) return;
+
+  const formData = new FormData();
+  formData.append('type', selectedType);
+  formData.append('garansi', selectedGaransi);
+  selectedFiles.forEach(f => formData.append('files', f));
+
+  document.getElementById('uploadBtn').disabled = true;
+  setOverlay('Mengupload ke Server', 'Sedang mengirim data, mohon tunggu...', 0);
+
+  let prog = 0;
+  const interval = setInterval(() => {
+    prog = Math.min(prog + 5, 90);
+    setOverlay('Mengupload ke Server', 'Proses upload sedang berjalan...', prog);
+  }, 200);
+
+  try {
+    const res = await fetch('/api/admin/stock/upload', {
+      method: 'POST',
+      headers: {
+        'x-admin-token': window._adminToken || '',
+        'x-tg-init-data': initData || '',
+      },
+      body: formData,
+    });
+    const data = await res.json();
+    clearInterval(interval);
+    setOverlay('Selesai!', 'Menyimpan konfigurasi...', 100);
+
+    if (data.success) {
+      setTimeout(() => {
+        hideOverlay();
+        showToast(`✅ ${data.uploaded} file berhasil diupload!`);
+        document.getElementById('uploadBtn').disabled = false;
+        clearFiles();
+      }, 700);
+    } else {
+      hideOverlay();
+      showToast('❌ Upload gagal: ' + (data.error || ''));
+      document.getElementById('uploadBtn').disabled = false;
+    }
+  } catch {
+    clearInterval(interval);
+    hideOverlay();
+    showToast('❌ Terjadi kesalahan saat upload.');
+    document.getElementById('uploadBtn').disabled = false;
+  }
+}
+
+// ─── PRICES ───────────────────────────────────────────────────────────────────
+async function loadPrices() {
+  try {
+    const res = await apiFetch('/api/admin/prices');
+    const { prices } = await res.json();
+    document.getElementById('p-muda-g').value  = prices.muda_garansi    || '';
+    document.getElementById('p-muda-ng').value = prices.muda_no_garansi || '';
+    document.getElementById('p-tua-g').value   = prices.tua_garansi     || '';
+    document.getElementById('p-tua-ng').value  = prices.tua_no_garansi  || '';
+  } catch {
+    showToast('❌ Gagal memuat harga.');
+  }
+}
+
+async function savePrices() {
+  const prices = {
+    muda_garansi:    parseInt(document.getElementById('p-muda-g').value)  || 0,
+    muda_no_garansi: parseInt(document.getElementById('p-muda-ng').value) || 0,
+    tua_garansi:     parseInt(document.getElementById('p-tua-g').value)   || 0,
+    tua_no_garansi:  parseInt(document.getElementById('p-tua-ng').value)  || 0,
+  };
+  try {
+    const res = await apiFetch('/api/admin/prices', {
+      method: 'POST',
+      body: JSON.stringify({ prices }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      tg.showAlert('✅ Harga berhasil disimpan!');
+    } else {
+      showToast('❌ Gagal menyimpan.');
+    }
+  } catch {
+    showToast('❌ Terjadi kesalahan.');
+  }
+}
+
+// ─── TOAST ────────────────────────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg) {
+  const el = document.getElementById('toastEl');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+// ─── START ────────────────────────────────────────────────────────────────────
+checkAuth();

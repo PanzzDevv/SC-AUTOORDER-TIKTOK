@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>PanzzStore Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <link rel="stylesheet" href="/dashboard/css/miniapp.css" />
+</head>
+<body>
+  <!-- LOADING SCREEN -->
+  <div id="loadingScreen">
+    <div class="loader-logo">🏪</div>
+    <div class="loader-name">PanzzStore</div>
+    <div class="loader-spin"></div>
+  </div>
+
+  <!-- UNAUTHORIZED -->
+  <div id="unauthorizedScreen" style="display:none;">
+    <div class="unauth-icon">🚫</div>
+    <h2>Akses Ditolak</h2>
+    <p>Kamu tidak memiliki izin untuk mengakses panel admin ini.</p>
+  </div>
+
+  <!-- MAIN APP -->
+  <div id="mainApp" style="display:none;">
+
+    <!-- BOTTOM NAV -->
+    <nav class="bottom-nav">
+      <button class="nav-btn active" id="nav-home" onclick="switchTab('home')">
+        <span class="nav-icon">📊</span>
+        <span class="nav-label">Dashboard</span>
+      </button>
+      <button class="nav-btn" id="nav-orders" onclick="switchTab('orders')">
+        <span class="nav-icon">🛒</span>
+        <span class="nav-label">Order</span>
+        <span class="nav-badge" id="pendingBadge" style="display:none">0</span>
+      </button>
+      <button class="nav-btn" id="nav-stock" onclick="switchTab('stock')">
+        <span class="nav-icon">📦</span>
+        <span class="nav-label">Stok</span>
+      </button>
+      <button class="nav-btn" id="nav-upload" onclick="switchTab('upload')">
+        <span class="nav-icon">⬆️</span>
+        <span class="nav-label">Upload</span>
+      </button>
+      <button class="nav-btn" id="nav-settings" onclick="switchTab('settings')">
+        <span class="nav-icon">⚙️</span>
+        <span class="nav-label">Harga</span>
+      </button>
+    </nav>
+
+    <!-- CONTENT AREA -->
+    <main class="content-area">
+
+      <!-- ── HOME TAB ──────────────────────────────────────────────── -->
+      <div class="tab-content active" id="tab-home">
+        <div class="page-header">
+          <div>
+            <h1 class="page-title">Dashboard</h1>
+            <p class="page-sub" id="greetText">Selamat datang!</p>
+          </div>
+          <button class="refresh-btn" onclick="loadHome()">🔄</button>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats-row">
+          <div class="stat-mini purple">
+            <div class="stat-mini-icon">📦</div>
+            <div class="stat-mini-val" id="m-today-orders">—</div>
+            <div class="stat-mini-lbl">Order Hari Ini</div>
+          </div>
+          <div class="stat-mini pink">
+            <div class="stat-mini-icon">💵</div>
+            <div class="stat-mini-val" id="m-today-rev">—</div>
+            <div class="stat-mini-lbl">Revenue Hari Ini</div>
+          </div>
+        </div>
+        <div class="stats-row">
+          <div class="stat-mini green">
+            <div class="stat-mini-icon">✅</div>
+            <div class="stat-mini-val" id="m-total-orders">—</div>
+            <div class="stat-mini-lbl">Total Selesai</div>
+          </div>
+          <div class="stat-mini blue">
+            <div class="stat-mini-icon">🏦</div>
+            <div class="stat-mini-val" id="m-total-rev">—</div>
+            <div class="stat-mini-lbl">Total Revenue</div>
+          </div>
+        </div>
+
+        <!-- Stock Overview -->
+        <h2 class="section-title">📊 Stok Saat Ini</h2>
+        <div class="stock-list" id="homeStockList">
+          <div class="skeleton-row"></div>
+          <div class="skeleton-row"></div>
+          <div class="skeleton-row"></div>
+          <div class="skeleton-row"></div>
+        </div>
+
+        <!-- Recent Orders -->
+        <h2 class="section-title" style="margin-top:1.25rem;">🛒 Order Terbaru</h2>
+        <div class="order-list" id="homeOrderList">
+          <div class="skeleton-row"></div>
+          <div class="skeleton-row"></div>
+        </div>
+      </div>
+
+      <!-- ── ORDERS TAB ─────────────────────────────────────────────── -->
+      <div class="tab-content" id="tab-orders">
+        <div class="page-header">
+          <div>
+            <h1 class="page-title">Semua Order</h1>
+            <p class="page-sub">Kelola order masuk</p>
+          </div>
+          <button class="refresh-btn" onclick="loadOrders()">🔄</button>
+        </div>
+
+        <!-- Filter chips -->
+        <div class="filter-chips">
+          <button class="chip active" onclick="filterOrders('all', this)">Semua</button>
+          <button class="chip" onclick="filterOrders('pending', this)">⏳ Pending</button>
+          <button class="chip" onclick="filterOrders('done', this)">✅ Selesai</button>
+        </div>
+
+        <div class="order-list" id="allOrderList">
+          <div class="skeleton-row"></div>
+          <div class="skeleton-row"></div>
+          <div class="skeleton-row"></div>
+        </div>
+      </div>
+
+      <!-- ── STOCK TAB ──────────────────────────────────────────────── -->
+      <div class="tab-content" id="tab-stock">
+        <div class="page-header">
+          <div>
+            <h1 class="page-title">Stok Akun</h1>
+            <p class="page-sub">Pantau ketersediaan</p>
+          </div>
+          <button class="refresh-btn" onclick="loadStock()">🔄</button>
+        </div>
+        <div class="stock-list" id="stockDetailList">
+          <div class="skeleton-row"></div>
+          <div class="skeleton-row"></div>
+          <div class="skeleton-row"></div>
+          <div class="skeleton-row"></div>
+        </div>
+      </div>
+
+      <!-- ── UPLOAD TAB ─────────────────────────────────────────────── -->
+      <div class="tab-content" id="tab-upload">
+        <div class="page-header">
+          <h1 class="page-title">Upload Akun</h1>
+        </div>
+
+        <div class="form-card">
+          <div class="form-group">
+            <label>Tipe Akun</label>
+            <div class="segmented">
+              <button class="seg-btn active" id="seg-muda" onclick="selectType('muda', this)">🧒 Muda</button>
+              <button class="seg-btn" id="seg-tua" onclick="selectType('tua', this)">👴 Tua</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Garansi</label>
+            <div class="segmented">
+              <button class="seg-btn active" id="seg-yes" onclick="selectGaransi('true', this)">✅ Garansi</button>
+              <button class="seg-btn" id="seg-no" onclick="selectGaransi('false', this)">❌ No Garansi</button>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:.75rem; margin-bottom:1rem;">
+          <div class="upload-drop" style="flex:1; margin-bottom:0; padding:1.5rem .5rem;" onclick="document.getElementById('fileInput').click()">
+            <div class="upload-drop-icon" style="font-size:2rem; margin-bottom:.5rem;">📦</div>
+            <p class="upload-drop-title" style="font-size:.85rem;">Upload ZIP</p>
+          </div>
+          <div class="upload-drop" style="flex:1; margin-bottom:0; padding:1.5rem .5rem; border-color:var(--success); background:rgba(16,185,129,0.05);" onclick="document.getElementById('folderInput').click()">
+            <div class="upload-drop-icon" style="font-size:2rem; margin-bottom:.5rem;">📁</div>
+            <p class="upload-drop-title" style="font-size:.85rem;">Upload Folder (Auto Zip)</p>
+          </div>
+        </div>
+        
+        <div style="background:rgba(255,255,255,0.05); border-left:3px solid var(--primary); padding:0.75rem; border-radius:4px; margin-bottom:1.5rem; font-size:0.75rem; color:#bbb; line-height:1.5;">
+          <strong style="color:var(--primary-light);">💡 Info Upload:</strong><br/>
+          • <b>Upload ZIP (Support PC & HP):</b> Pilih file ZIP satuan atau 1 Master ZIP yang berisi banyak folder akun (otomatis dipecah).<br/>
+          • <b>Upload Folder (Hanya PC):</b> Pilih banyak folder sekaligus, sistem akan otomatis membungkus tiap folder jadi file ZIP terpisah.
+        </div>
+        
+        <input type="file" id="fileInput" multiple accept=".zip" style="display:none" onchange="handleFiles(this.files)" />
+        <input type="file" id="folderInput" webkitdirectory directory multiple style="display:none" onchange="handleFolder(this.files)" />
+
+        <div id="filePreview" style="display:none;">
+          <div class="file-preview-header">
+            <span id="fileCount">0 file dipilih</span>
+            <button class="link-btn" onclick="clearFiles()">Hapus Semua</button>
+          </div>
+          <div id="fileList" class="file-list"></div>
+          <button class="btn-primary full" id="uploadBtn" onclick="doUpload()">⬆️ Upload Sekarang</button>
+        </div>
+
+        <div id="uploadProgressWrap" style="display:none;margin-top:1rem;">
+          <p class="prog-label">Mengupload...</p>
+          <div class="prog-track"><div class="prog-bar" id="progBar"></div></div>
+        </div>
+      </div>
+
+      <!-- ── SETTINGS TAB ───────────────────────────────────────────── -->
+      <div class="tab-content" id="tab-settings">
+        <div class="page-header">
+          <h1 class="page-title">Atur Harga</h1>
+        </div>
+
+        <div class="form-card">
+          <div class="price-row">
+            <div class="price-label">🧒 Muda + ✅ Garansi</div>
+            <div class="price-input-row">
+              <span class="rp">Rp</span>
+              <input type="number" id="p-muda-g" placeholder="50000" />
+            </div>
+          </div>
+          <div class="price-row">
+            <div class="price-label">🧒 Muda + ❌ No Garansi</div>
+            <div class="price-input-row">
+              <span class="rp">Rp</span>
+              <input type="number" id="p-muda-ng" placeholder="30000" />
+            </div>
+          </div>
+          <div class="price-row">
+            <div class="price-label">👴 Tua + ✅ Garansi</div>
+            <div class="price-input-row">
+              <span class="rp">Rp</span>
+              <input type="number" id="p-tua-g" placeholder="80000" />
+            </div>
+          </div>
+          <div class="price-row">
+            <div class="price-label">👴 Tua + ❌ No Garansi</div>
+            <div class="price-input-row">
+              <span class="rp">Rp</span>
+              <input type="number" id="p-tua-ng" placeholder="60000" />
+            </div>
+          </div>
+          <button class="btn-primary full" style="margin-top:.5rem;" onclick="savePrices()">💾 Simpan Harga</button>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- LOADING OVERLAY -->
+  <div id="loadingOverlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.8); backdrop-filter:blur(5px); -webkit-backdrop-filter:blur(5px); z-index:9999; align-items:center; justify-content:center; padding:2rem;">
+    <div style="background:var(--card-bg); text-align:center; padding:2.5rem 2rem; border-radius:24px; max-width:320px; width:100%; border:1px solid rgba(255,255,255,0.1); box-shadow:0 20px 40px rgba(0,0,0,0.5); animation: fadeScale 0.3s cubic-bezier(0.16,1,0.3,1);">
+      <div class="spinner" style="margin: 0 auto 1.5rem; width: 48px; height: 48px; border: 4px solid var(--border-color); border-top-color: var(--primary); border-radius: 50%; animation: spin 1s linear infinite;"></div>
+      <h3 id="loadingTitle" style="margin-bottom:0.5rem; font-size:1.15rem; color:var(--text-main); font-weight:800;">Memproses...</h3>
+      <p id="loadingDesc" style="font-size:0.9rem; color:var(--text-muted); margin-bottom:1.5rem; line-height:1.4;">Mohon tunggu sebentar</p>
+      <div class="prog-track" style="background:rgba(255,255,255,0.05); border-radius:99px; height:8px; overflow:hidden;">
+        <div class="prog-bar" id="loadingProgBar" style="background:var(--primary); width:0%; height:100%; transition:width 0.3s ease;"></div>
+      </div>
+      <style>
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes fadeScale { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+      </style>
+    </div>
+  </div>
+
+  <!-- TOAST -->
+  <div id="toastEl" class="toast-mini"></div>
+
+  <!-- ORDER DETAIL MODAL -->
+  <div id="orderModal" class="modal-overlay" style="display:none;" onclick="closeModal(event)">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Detail Order</h3>
+        <button onclick="closeModal()" class="modal-close">✕</button>
+      </div>
+      <div id="modalBody" class="modal-body"></div>
+    </div>
+  </div>
+
+  <!-- STOCK MODAL -->
+  <div id="stockModal" class="modal-overlay" style="display:none;" onclick="closeModal(event)">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="stockModalTitle">Detail Stok</h3>
+        <button class="modal-close" onclick="closeStockModal()">✕</button>
+      </div>
+      <div style="padding: 1.5rem; display:flex; flex-direction:column; gap:1rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <h4 style="color:var(--text-main);">Daftar Akun (<span id="stockModalCount">0</span>)</h4>
+          <button class="btn-danger" id="btnDeleteStock" style="padding:0.4rem 1rem; font-size:0.8rem; border-radius:8px; display:none;">🗑️ Hapus Stok Ini</button>
+        </div>
+        <div id="stockFileList" style="display:flex; flex-direction:column; gap:0.5rem; max-height:40vh; overflow-y:auto; padding-right:0.5rem;">
+          <!-- List of files -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/dashboard/js/miniapp.js"></script>
+</body>
+</html>

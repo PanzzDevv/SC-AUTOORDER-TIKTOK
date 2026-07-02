@@ -1,0 +1,374 @@
+const {
+  getPrices, getPriceKey, getStockCount,
+  createOrder, getAvailableAccounts, markAccountsSold, updateOrderStatus, getOrder,
+} = require('../../server/firebase');
+const { createZipFromAccounts, cleanupZip } = require('../../server/zipHelper');
+
+const storeName = process.env.STORE_NAME || 'PanzzStore';
+const { getSession, clearSession } = require('../sessions');
+const { escapeHTML, formatRupiah, editMain } = require('../utils');
+const axios = require('axios');
+
+// ─── QUICK QTY BUTTONS ────────────────────────────────────────────────────────
+const QTY_KEYBOARD = (backData) => ({
+  inline_keyboard: [
+    [
+      { text: '10',  callback_data: 'qty_10'  },
+      { text: '20',  callback_data: 'qty_20'  },
+      { text: '30',  callback_data: 'qty_30'  },
+      { text: '40',  callback_data: 'qty_40'  },
+      { text: '50',  callback_data: 'qty_50'  },
+    ],
+    [
+      { text: '60',  callback_data: 'qty_60'  },
+      { text: '70',  callback_data: 'qty_70'  },
+      { text: '80',  callback_data: 'qty_80'  },
+      { text: '90',  callback_data: 'qty_90'  },
+      { text: '100', callback_data: 'qty_100' },
+    ],
+    [
+      { text: '200', callback_data: 'qty_200' },
+    ],
+    [{ text: '🔙 Kembali', callback_data: backData }],
+  ],
+});
+
+// ─── STEP 1: Menu beli akun ───────────────────────────────────────────────────
+async function handleBeli(bot, chatId, messageId) {
+  const [mg, mn, tg, tn] = await Promise.all([
+    getStockCount('muda', true),
+    getStockCount('muda', false),
+    getStockCount('tua',  true),
+    getStockCount('tua',  false),
+  ]);
+
+  const text = `🛒 <b>Beli Akun TikTok</b>
+
+Pilih tipe akun yang kamu inginkan:
+
+<blockquote>🧒 Akun Muda Garansi: <b>${mg} akun</b>
+🧒 Akun Muda No Garansi: <b>${mn} akun</b>
+👴 Akun Tua Garansi: <b>${tg} akun</b>
+👴 Akun Tua No Garansi: <b>${tn} akun</b></blockquote>`;
+
+  const keyboard = {
+    inline_keyboard: [
+      [
+        { text: '🧒 Akun Muda', callback_data: 'type_muda' },
+        { text: '👴 Akun Tua',  callback_data: 'type_tua'  },
+      ],
+      [{ text: '🔙 Kembali', callback_data: 'back_menu' }],
+    ],
+  };
+
+  await editMain(bot, chatId, text, keyboard, messageId);
+}
+
+// ─── STEP 2: Pilih garansi ────────────────────────────────────────────────────
+async function handleSelectType(bot, chatId, messageId, type) {
+  getSession(chatId).type = type;
+  const typeName = type === 'muda' ? '🧒 Akun Muda' : '👴 Akun Tua';
+
+  const prices = await getPrices();
+  const pG  = prices[getPriceKey(type, true)];
+  const pNG = prices[getPriceKey(type, false)];
+
+  const text = `${typeName}
+
+Pilih jenis garansi:
+
+<blockquote>✅ <b>Garansi</b> — Rp ${formatRupiah(pG)}/akun
+❌ <b>No Garansi</b> — Rp ${formatRupiah(pNG)}/akun</blockquote>`;
+
+  const keyboard = {
+    inline_keyboard: [
+      [
+        { text: '✅ Garansi',    callback_data: 'garansi_yes' },
+        { text: '❌ No Garansi', callback_data: 'garansi_no'  },
+      ],
+      [{ text: '🔙 Kembali', callback_data: 'menu_beli' }],
+    ],
+  };
+
+  await editMain(bot, chatId, text, keyboard, messageId);
+}
+
+// ─── STEP 3: Pilih jumlah ─────────────────────────────────────────────────────
+async function handleSelectGaransi(bot, chatId, messageId, garansi) {
+  const session = getSession(chatId);
+  session.garansi = garansi;
+
+  const prices = await getPrices();
+  const price  = prices[getPriceKey(session.type, garansi)];
+  const stock  = await getStockCount(session.type, garansi);
+  session.pricePerUnit = price;
+
+  const typeName    = session.type === 'muda' ? 'Akun Muda' : 'Akun Tua';
+  const garansiName = garansi ? '✅ Garansi' : '❌ No Garansi';
+
+  const text = `📦 <b>${typeName} — ${garansiName}</b>
+
+<blockquote>💰 Harga: Rp ${formatRupiah(price)}/akun
+📊 Stok tersedia: ${stock} akun</blockquote>
+
+Pilih atau ketik jumlah akun:`;
+
+  session.waitingForQty = true;
+
+  await editMain(bot, chatId, text, QTY_KEYBOARD(`type_${session.type}`), messageId);
+}
+
+// ─── STEP 4: Konfirmasi order ─────────────────────────────────────────────────
+async function handleQtySelected(bot, chatId, messageId, qty) {
+  const session = getSession(chatId);
+  session.qty           = qty;
+  session.waitingForQty = false;
+
+  const { type, garansi, pricePerUnit } = session;
+  const stock = await getStockCount(type, garansi);
+
+  if (qty > stock) {
+    const errText = `❌ <b>Stok tidak cukup!</b>\n\n<blockquote>Tersedia hanya <b>${stock} akun</b>.</blockquote>\nSilakan pilih jumlah yang lebih kecil.`;
+    await editMain(bot, chatId, errText, QTY_KEYBOARD(`type_${type}`), messageId);
+    return;
+  }
+
+  const total       = pricePerUnit * qty;
+  session.totalPrice = total;
+
+  const typeName    = type === 'muda' ? 'Akun Muda' : 'Akun Tua';
+  const garansiName = garansi ? '✅ Garansi' : '❌ No Garansi';
+
+  const text = `🧾 <b>Konfirmasi Order</b>
+
+<blockquote>📦 Produk: <b>${typeName}</b>
+🛡️ Garansi: <b>${garansiName}</b>
+🔢 Jumlah: <b>${qty} akun</b>
+💰 Harga: Rp ${formatRupiah(pricePerUnit)} × ${qty}
+
+💵 <b>Total: Rp ${formatRupiah(total)}</b></blockquote>
+
+Lanjutkan ke pembayaran?`;
+
+  const keyboard = {
+    inline_keyboard: [
+      [{ text: '💳 Bayar Sekarang', callback_data: 'confirm_order' }],
+      [{ text: '❌ Batalkan',       callback_data: 'menu_beli'     }],
+    ],
+  };
+
+  await editMain(bot, chatId, text, keyboard, messageId);
+}
+
+// ─── STEP 5: Buat payment Pakasir ─────────────────────────────────────────────
+async function handleConfirmOrder(bot, chatId, messageId, from) {
+  const session = getSession(chatId);
+  const { type, garansi, qty, totalPrice } = session;
+
+  if (!type || !qty || !totalPrice) {
+    await editMain(bot, chatId,
+      '❌ Sesi order habis. Silakan mulai ulang.', {}, messageId);
+    return;
+  }
+
+  await editMain(bot, chatId, '⏳ <i>Membuat link pembayaran...</i>', {}, messageId);
+
+  try {
+    const shortId = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const pakasirOrderId = `PNZ-${shortId}`;
+    const payment_url = `https://app.pakasir.com/pay/${process.env.PAKASIR_SLUG}/${totalPrice}?order_id=${pakasirOrderId}`;
+
+    const order = await createOrder(
+      chatId, from.username, type, garansi, qty, totalPrice, payment_url, pakasirOrderId
+    );
+    session.orderId = order.id;
+
+    const typeName    = type === 'muda' ? 'Akun Muda' : 'Akun Tua';
+    const garansiName = garansi ? 'Garansi' : 'No Garansi';
+
+    const text = `💳 <b>Scan QRIS untuk Membayar</b>
+
+<blockquote>📦 ${qty}x ${typeName} ${garansiName}
+💵 Total: Rp ${formatRupiah(totalPrice)}</blockquote>
+
+🔗 <i>Atau bayar via link:</i> <a href="${payment_url}">Klik di Sini</a>
+
+<i>⚠️ QRIS berlaku 30 menit</i>
+<i>📦 Akun otomatis dikirim setelah bayar</i>`;
+
+    const keyboard = {
+      inline_keyboard: [
+        [{ text: '🔙 Menu Utama', callback_data: 'back_menu' }],
+      ],
+    };
+
+    const { generateQris } = require('../utils');
+    const qrBuffer = await generateQris(totalPrice, pakasirOrderId);
+
+    if (qrBuffer) {
+      // 1. Restore the main banner back to the Main Menu
+      const { buildCaption, buildMainKeyboard } = require('./start');
+      await editMain(bot, chatId, buildCaption(from.first_name || from.username || 'Kawan'), buildMainKeyboard(chatId), session.mainMessageId || messageId);
+      
+      // 2. Send the QR code as a SEPARATE message that can be closed
+      const qrKeyboard = {
+        inline_keyboard: [
+          [{ text: '❌ Tutup QRIS', callback_data: 'close_qris' }],
+        ],
+      };
+      const qrMsg = await bot.sendPhoto(chatId, qrBuffer, {
+        caption: text,
+        parse_mode: 'HTML',
+        reply_markup: qrKeyboard,
+      });
+      
+      const { updateOrderStatus } = require('../../server/firebase');
+      await updateOrderStatus(order.id, 'pending', { qrisMessageId: qrMsg.message_id });
+    } else {
+      await editMain(bot, chatId, text, keyboard, messageId);
+    }
+    
+    clearSession(chatId);
+
+  } catch (err) {
+    console.error('Pakasir error:', err.response?.data || err.message);
+    await editMain(bot, chatId,
+      '❌ <b>Gagal membuat link pembayaran.</b>\nCoba beberapa saat lagi atau hubungi admin.', {
+        inline_keyboard: [[{ text: '🔙 Menu Utama', callback_data: 'back_menu' }]],
+      }, messageId);
+  }
+}
+
+// ─── HANDLE TEXT (qty manual) ─────────────────────────────────────────────────
+async function handleTextMessage(bot, msg) {
+  const chatId = msg.chat.id;
+  const session = getSession(chatId);
+
+  if (session.waitingForQty) {
+    const qty = parseInt(msg.text);
+    if (isNaN(qty) || qty < 1 || qty > 500) {
+      await bot.sendMessage(chatId,
+        '❌ Masukkan angka yang valid (1-500).', { parse_mode: 'HTML' });
+      return;
+    }
+    bot.deleteMessage(chatId, msg.message_id).catch(() => {});
+    await handleQtySelected(bot, chatId, session.mainMessageId, qty);
+  }
+}
+
+// ─── DELIVER ORDER (dipanggil setelah payment confirm) ────────────────────────
+async function deliverOrder(bot, orderId) {
+  const { updateUserSaldo } = require('../../server/firebase');
+  const order = await getOrder(orderId);
+  if (!order || order.status === 'done') return;
+
+  const chatId = order.userId;
+
+  // Hapus pesan QRIS jika tersimpan
+  if (order.qrisMessageId) {
+    bot.deleteMessage(chatId, order.qrisMessageId).catch(() => {});
+  }
+
+  if (order.type === 'topup') {
+    try {
+      await updateOrderStatus(orderId, 'processing');
+      await updateUserSaldo(order.userId, order.totalPrice);
+      await updateOrderStatus(orderId, 'done', { deliveredAt: new Date().toISOString() });
+
+      await bot.sendMessage(chatId, `✅ <b>Top Up Saldo Berhasil!</b>\n\n<blockquote>💵 Saldo berhasil ditambahkan: <b>Rp ${formatRupiah(order.totalPrice)}</b></blockquote>\n<i>Terima kasih telah melakukan top up di ${storeName}! 🙏</i>`, {
+        parse_mode: 'HTML',
+      });
+    } catch (err) {
+      console.error('Topup delivery error:', err.message);
+      await bot.sendMessage(chatId, '❌ <b>Gagal menambahkan saldo secara otomatis.</b>\nHubungi admin untuk konfirmasi manual.', {
+        parse_mode: 'HTML'
+      });
+      await updateOrderStatus(orderId, 'error');
+    }
+    return;
+  }
+
+  const waitMsg = await bot.sendMessage(chatId,
+    '⏳ <b>Pembayaran dikonfirmasi! Sedang menyiapkan akun kamu...</b>',
+    { parse_mode: 'HTML' });
+
+  try {
+    await updateOrderStatus(orderId, 'processing');
+    const accounts = await getAvailableAccounts(order.type, order.garansi, order.qty);
+
+    if (accounts.length < order.qty) {
+      bot.deleteMessage(chatId, waitMsg.message_id).catch(() => {});
+      await bot.sendMessage(chatId,
+        '⚠️ <b>Stok sedang kosong!</b> Admin akan segera menghubungi kamu.',
+        { parse_mode: 'HTML' });
+      await updateOrderStatus(orderId, 'out_of_stock');
+      return;
+    }
+
+    const fs = require('fs');
+    const path = require('path');
+    const MAX_ZIP_SIZE = 45 * 1024 * 1024; // 45 MB limit per zip for Telegram API
+    
+    let chunks = [];
+    let currentChunk = [];
+    let currentSize = 0;
+
+    for (let acc of accounts) {
+      const sourcePath = path.join(__dirname, '../../storage/', acc.storagePath);
+      let size = 1024 * 1024; // fallback 1MB
+      if (fs.existsSync(sourcePath)) {
+        size = fs.statSync(sourcePath).size;
+      }
+      
+      if (currentSize + size > MAX_ZIP_SIZE && currentChunk.length > 0) {
+        chunks.push(currentChunk);
+        currentChunk = [acc];
+        currentSize = size;
+      } else {
+        currentChunk.push(acc);
+        currentSize += size;
+      }
+    }
+    if (currentChunk.length > 0) chunks.push(currentChunk);
+
+    let part = 1;
+    for (let chunk of chunks) {
+      const partSuffix = chunks.length > 1 ? `_Part${part}` : '';
+      const zipPath = await createZipFromAccounts(chunk, `${orderId}${partSuffix}`);
+      
+      let caption = '';
+      if (chunks.length === 1) {
+        caption = `✅ <b>Order Berhasil!</b>\n\n<blockquote>📦 ${order.qty}x Akun TikTok ${order.type === 'muda' ? 'Muda' : 'Tua'} ${order.garansi ? 'Garansi' : 'No Garansi'}\n🆔 Order ID: <code>${orderId}</code></blockquote>\n<i>Terima kasih sudah belanja di ${storeName}! 🙏</i>\n<i>Jika ada masalah, hubungi admin ya.</i>`;
+      } else {
+        caption = `📦 <b>Part ${part} dari ${chunks.length}</b> (${chunk.length} Akun)\n🆔 <code>${orderId}</code>\n<i>Orderan dipecah jadi beberapa file karena ukuran terlalu besar.</i>`;
+      }
+      
+      await bot.sendDocument(chatId, zipPath, {
+        caption: caption,
+        parse_mode: 'HTML',
+      });
+      cleanupZip(zipPath);
+      part++;
+    }
+
+    bot.deleteMessage(chatId, waitMsg.message_id).catch(() => {});
+
+    await markAccountsSold(accounts.map(a => a.id));
+    await updateOrderStatus(orderId, 'done', { deliveredAt: new Date().toISOString() });
+
+  } catch (err) {
+    console.error('Order Delivery Error:', err);
+    bot.deleteMessage(chatId, waitMsg.message_id).catch(() => {});
+    console.error('Delivery error:', err.message);
+    await bot.sendMessage(chatId,
+      '❌ <b>Terjadi kesalahan saat mengirim akun.</b>\nAdmin akan segera membantu kamu.',
+      { parse_mode: 'HTML' });
+    await updateOrderStatus(orderId, 'error');
+  }
+}
+
+module.exports = {
+  handleBeli, handleSelectType, handleSelectGaransi,
+  handleQtySelected, handleConfirmOrder, handleTextMessage,
+  deliverOrder,
+};

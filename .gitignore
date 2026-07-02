@@ -1,0 +1,8 @@
+.env
+node_modules/
+storage/temp-uploads/
+storage/temp-zips/
+*.zip
+serviceAccountKey.json
+serviceAccountKey.json.json
+
