@@ -17,7 +17,7 @@ Bot Telegram untuk jualan akun TikTok otomatis. Fitur admin 100% terintegrasi di
 ### 1. Clone & Install Dependensi
 
 ```bash
-cd "SC AUTO ORDER NEW"
+cd "SC AUTOORDER TIKTOK"
 npm install
 ```
 

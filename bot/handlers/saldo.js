@@ -164,8 +164,9 @@ Anda memasukkan: Rp ${formatRupiah(amount)}.</blockquote>`;
 
   } catch (err) {
     console.error('Pakasir Topup error:', err.response?.data || err.message);
+    const adminUsername = process.env.ADMIN_USERNAME || 'panzzstore_admin';
     await editMain(bot, chatId,
-      '❌ <b>Gagal membuat link pembayaran top up.</b>\nCoba beberapa saat lagi atau hubungi admin.', {
+      `❌ <b>Gagal membuat link pembayaran top up.</b>\nCoba beberapa saat lagi atau hubungi admin (@${adminUsername}).`, {
         inline_keyboard: [[{ text: '🔙 Menu Saldo', callback_data: 'menu_saldo' }]],
       }, messageId);
   }

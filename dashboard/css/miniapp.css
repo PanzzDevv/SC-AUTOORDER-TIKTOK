@@ -55,6 +55,7 @@ body {
   font-weight: 800;
   background: linear-gradient(135deg, var(--primary), var(--accent));
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
   margin: 1rem 0 2rem;
   letter-spacing: -0.5px;
@@ -294,6 +295,7 @@ body {
   cursor: pointer;
   transition: all .2s;
   -webkit-user-select: none;
+  user-select: none;
 }
 .order-item:active { transform: scale(.98); background: var(--card-hover); }
 

@@ -232,8 +232,9 @@ async function handleConfirmOrder(bot, chatId, messageId, from) {
 
   } catch (err) {
     console.error('Pakasir error:', err.response?.data || err.message);
+    const adminUsername = process.env.ADMIN_USERNAME || 'panzzstore_admin';
     await editMain(bot, chatId,
-      '❌ <b>Gagal membuat link pembayaran.</b>\nCoba beberapa saat lagi atau hubungi admin.', {
+      `❌ <b>Gagal membuat link pembayaran.</b>\nCoba beberapa saat lagi atau hubungi admin (@${adminUsername}).`, {
         inline_keyboard: [[{ text: '🔙 Menu Utama', callback_data: 'back_menu' }]],
       }, messageId);
   }
@@ -337,8 +338,9 @@ async function deliverOrder(bot, orderId) {
       const zipPath = await createZipFromAccounts(chunk, `${orderId}${partSuffix}`);
       
       let caption = '';
+      const adminUsername = process.env.ADMIN_USERNAME || 'panzzstore_admin';
       if (chunks.length === 1) {
-        caption = `✅ <b>Order Berhasil!</b>\n\n<blockquote>📦 ${order.qty}x Akun TikTok ${order.type === 'muda' ? 'Muda' : 'Tua'} ${order.garansi ? 'Garansi' : 'No Garansi'}\n🆔 Order ID: <code>${orderId}</code></blockquote>\n<i>Terima kasih sudah belanja di ${storeName}! 🙏</i>\n<i>Jika ada masalah, hubungi admin ya.</i>`;
+        caption = `✅ <b>Order Berhasil!</b>\n\n<blockquote>📦 ${order.qty}x Akun TikTok ${order.type === 'muda' ? 'Muda' : 'Tua'} ${order.garansi ? 'Garansi' : 'No Garansi'}\n🆔 Order ID: <code>${orderId}</code></blockquote>\n<i>Terima kasih sudah belanja di ${storeName}! 🙏</i>\n<i>Jika ada masalah, hubungi admin (@${adminUsername}) ya.</i>`;
       } else {
         caption = `📦 <b>Part ${part} dari ${chunks.length}</b> (${chunk.length} Akun)\n🆔 <code>${orderId}</code>\n<i>Orderan dipecah jadi beberapa file karena ukuran terlalu besar.</i>`;
       }
