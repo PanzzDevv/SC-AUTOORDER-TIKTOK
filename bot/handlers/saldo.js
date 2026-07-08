@@ -11,15 +11,11 @@ async function handleSaldo(bot, chatId, messageId, from) {
   const orders = user?.totalOrders || 0;
   const name   = escapeHTML(from?.first_name || from?.username || 'Pengguna');
 
-  const text = `💼 <b>E-Wallet & Saldo ${escapeHTML(storeName)}</b>
+  const text = `💼 <b>Saldo Kamu</b>
 
-<blockquote>👤 <b>Informasi Pemilik:</b>
-• Akun: <b>${name}</b>
-• Saldo Aktif: <code>Rp ${formatRupiah(saldo)}</code>
-• Total Transaksi: <b>${orders} Sukses</b></blockquote>
-
-💡 <b>Info Saldo:</b>
-Saldo Anda dapat digunakan untuk membeli akun TikTok dengan instan tanpa scan QRIS lagi. Silakan klik tombol di bawah untuk mengisi ulang saldo Anda!`;
+👤 User: <b>${name}</b>
+💵 Saldo: <b>Rp ${formatRupiah(saldo)}</b>
+📦 Transaksi: <b>${orders} order</b>`;
 
   const keyboard = {
     inline_keyboard: [

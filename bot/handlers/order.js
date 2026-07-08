@@ -43,17 +43,12 @@ async function handleBeli(bot, chatId, messageId) {
     getStockCount('tua',  false),
   ]);
 
-  const text = `🛒 <b>Pilih Kategori Akun TikTok</b>
+  const text = `🛒 <b>Pilih Kategori Akun</b>
 
-<blockquote>Silakan pilih umur akun TikTok yang Anda butuhkan di bawah ini:</blockquote>
+Pilih jenis akun TikTok yang Anda butuhkan:
 
-• 🧒 <b>Akun Muda</b>
-<i>Akun fresh (baru dibuat), sangat cocok untuk memulai branding baru dari nol dengan harga lebih terjangkau.</i>
-📈 Stok Tersedia: <b>Garansi (${mg})</b> | <b>No Garansi (${mn})</b>
-
-• 👴 <b>Akun Tua</b>
-<i>Akun berumur/lama (lebih kuat & matang), sangat ideal untuk kebutuhan stabilitas algoritma & optimasi lebih aman.</i>
-📈 Stok Tersedia: <b>Garansi (${tg})</b> | <b>No Garansi (${tn})</b>`;
+• 🧒 <b>Akun Muda</b>: Stok (${mg} G | ${mn} NG)
+• 👴 <b>Akun Tua</b>: Stok (${tg} G | ${tn} NG)`;
 
   const keyboard = {
     inline_keyboard: [
@@ -77,15 +72,10 @@ async function handleSelectType(bot, chatId, messageId, type) {
   const pG  = prices[getPriceKey(type, true)];
   const pNG = prices[getPriceKey(type, false)];
 
-  const text = `🛡️ <b>Pilihan Proteksi Garansi (${typeName})</b>
+  const text = `🛡️ <b>Pilih Jenis Garansi (${typeName})</b>
 
-<blockquote>Silakan pilih jenis garansi yang Anda inginkan:</blockquote>
-
-• ✅ <b>Dengan Garansi</b> — <code>Rp ${formatRupiah(pG)} /akun</code>
-<i>Mendapatkan jaminan ganti baru jika akun mengalami masalah dalam masa klaim aktif.</i>
-
-• ❌ <b>Tanpa Garansi</b> — <code>Rp ${formatRupiah(pNG)} /akun</code>
-<i>Dijual apa adanya tanpa jaminan pengembalian atau penggantian (non-refundable).</i>`;
+• ✅ <b>Garansi</b>: Rp ${formatRupiah(pG)}/akun
+• ❌ <b>No Garansi</b>: Rp ${formatRupiah(pNG)}/akun`;
 
   const keyboard = {
     inline_keyboard: [
@@ -201,17 +191,13 @@ async function handleConfirmOrder(bot, chatId, messageId, from) {
     const typeName    = type === 'muda' ? 'Akun Muda' : 'Akun Tua';
     const garansiName = garansi ? 'Garansi' : 'No Garansi';
 
-    const text = `💳 <b>Invoice Pembayaran QRIS (Pakasir)</b>
+    const text = `💳 <b>Pembayaran QRIS (Pakasir)</b>
 
-<blockquote>📦 <b>Detail Pesanan:</b>
-• Produk: <b>${qty}x TikTok ${typeName} (${garansiName})</b>
-• Total Tagihan: <code>Rp ${formatRupiah(totalPrice)}</code></blockquote>
+<blockquote>📦 Order: <b>${qty}x TikTok ${typeName} (${garansiName})</b>
+💵 Total: <b>Rp ${formatRupiah(totalPrice)}</b></blockquote>
 
-📲 <b>Cara Pembayaran:</b>
-1. Scan kode QR di atas menggunakan e-Wallet (Gopay/OVO/Dana/LinkAja) atau Mobile Banking Anda.
-2. <i>Atau klik link pembayaran langsung:</i> <a href="${payment_url}">Klik di Sini</a>.
-
-⚠️ <b>Penting:</b> Kode QR ini hanya berlaku selama <b>30 menit</b>. Setelah transfer berhasil, akun akan dikirim **detik itu juga** melalui chat ini!`;
+Scan QRIS di atas untuk membayar.
+Atau bayar via link: <a href="${payment_url}">Klik di Sini</a>`;
 
     const keyboard = {
       inline_keyboard: [

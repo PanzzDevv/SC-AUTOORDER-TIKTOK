@@ -16,16 +16,10 @@ const REPLY_KEYBOARD = {
 };
 
 function buildCaption(name) {
-  return `✨ <b>Welcome to ${escapeHTML(storeName.toUpperCase())} Bot!</b>
+  return `✨ <b>Halo, ${escapeHTML(name)}! Selamat datang di ${escapeHTML(storeName)}</b>
 
-<blockquote>Halo, <b>${escapeHTML(name)}</b>! Kami menyediakan Akun TikTok siap pakai berkualitas tinggi dengan sistem pengiriman instan.</blockquote>
-
-🛡️ <b>Kenapa Memilih Kami?</b>
-• ⚡ <b>Instant Delivery:</b> Akun dikirim otomatis dalam hitungan detik setelah bayar.
-• 🔒 <b>Quality Assurance:</b> Garansi keamanan & keaslian akun 100%.
-• 💳 <b>Easy Payment:</b> Mendukung QRIS otomatis & Sistem Saldo.
-
-Pilih menu di bawah ini untuk memulai pemesanan Anda! 👇`;
+🏪 Toko penjualan akun TikTok otomatis.
+Silakan klik tombol di bawah untuk mulai memesan! 👇`;
 }
 
 function buildMainKeyboard(chatId) {
