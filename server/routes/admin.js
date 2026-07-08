@@ -146,6 +146,17 @@ router.delete('/stock', adminAuth, async (req, res) => {
   }
 });
 
+// Helper to calculate SHA-256 hash of a file using streams
+function getFileHash(filePath) {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash('sha256');
+    const stream = fs.createReadStream(filePath);
+    stream.on('data', data => hash.update(data));
+    stream.on('end', () => resolve(hash.digest('hex')));
+    stream.on('error', err => reject(err));
+  });
+}
+
 // Upload account files ke Telegram Storage
 router.post('/stock/upload', adminAuth, upload.array('files', 500), async (req, res) => {
   try {
@@ -164,15 +175,28 @@ router.post('/stock/upload', adminAuth, upload.array('files', 500), async (req, 
 
     for (const file of req.files) {
       try {
+        // Hitung SHA-256 hash file temp
+        const fileHash = await getFileHash(file.path);
+
+        // Cek duplikasi hash di Firestore
+        const existingSnapshot = await db.collection('accounts')
+          .where('fileHash', '==', fileHash)
+          .limit(1)
+          .get();
+
+        if (!existingSnapshot.empty) {
+          throw new Error('Duplicate account file detected');
+        }
+
         const uuid = uuidv4();
         const finalPath = path.join(localAccountsDir, uuid);
 
         // Pindahkan file ke folder accounts dengan nama UUID
         fs.renameSync(file.path, finalPath);
 
-        // Simpan ke Firestore dengan status available dan storagePath terisi
+        // Simpan ke Firestore dengan status available, storagePath terisi, dan fileHash terisi
         const storagePath = `accounts/${uuid}`;
-        await addAccount(type, garansiBool, '', file.originalname, storagePath);
+        await addAccount(type, garansiBool, '', file.originalname, storagePath, fileHash);
 
         results.push({ fileName: file.originalname });
       } catch (err) {

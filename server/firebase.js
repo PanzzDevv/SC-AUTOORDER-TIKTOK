@@ -206,14 +206,16 @@ async function markAccountsSold(accountIds) {
  * @param {string} telegramFileId - Telegram File ID
  * @param {string} fileName - nama file asli
  * @param {string} [storagePath] - (legacy) path lokal lama, opsional
+ * @param {string} [fileHash] - hash SHA-256 file
  */
-async function addAccount(type, garansi, telegramFileId, fileName, storagePath = null) {
+async function addAccount(type, garansi, telegramFileId, fileName, storagePath = null, fileHash = '') {
   return await db.collection('accounts').add({
     type,
     garansi,
     status: 'available',
     telegramFileId,
     fileName,
+    fileHash,
     ...(storagePath ? { storagePath } : {}),
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   });
