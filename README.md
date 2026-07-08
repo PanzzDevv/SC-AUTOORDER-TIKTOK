@@ -118,35 +118,45 @@ Isi file `.env` dengan data kamu:
 
 ---
 
-## ☁️ Panduan Deploy di Railway (railway.app)
+## ☁️ Panduan Deploy di Railway (Untuk Anda / Buyer)
 
-Railway adalah platform hosting cloud yang sangat cocok dan praktis untuk mendepoloy bot ini secara 24/7 tanpa perlu mengelola OS Linux secara manual.
+Ada dua metode deploy yang bisa digunakan di [Railway](https://railway.app):
 
-### 1. Push ke GitHub (Private)
-* Hubungkan folder project Anda ke repositori **GitHub Private** Anda.
-* File `.env` dan `serviceAccountKey.json` otomatis diabaikan agar tidak bocor ke publik.
+### 🟢 Metode A: One-Click Deploy (Rekomendasi untuk Buyer)
+Jika Anda menjual script ini, Buyer cukup mengklik tombol berikut untuk menduplikasi template ke akun Railway mereka secara otomatis:
 
-### 2. Hubungkan ke Railway
-1. Login ke [Railway](https://railway.app) menggunakan akun GitHub Anda.
+[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template?template=https://github.com/PanzzDevv/SC-AUTOORDER-TIKTOK)
+
+> ⚠️ *Jangan lupa ganti `USERNAME_GITHUB_ANDA` dan `NAMA_REPO_ANDA` pada link di atas dengan repositori GitHub Anda sebelum membagikannya ke buyer!*
+
+---
+
+### 🔵 Metode B: Deploy Manual via GitHub Repo
+
+#### 1. Push ke GitHub (Private)
+* Hubungkan folder project ke repositori **GitHub Private**.
+* File `.env` dan `serviceAccountKey.json` otomatis diabaikan (`.gitignore`) agar rahasia database Anda tetap aman.
+
+#### 2. Hubungkan ke Railway
+1. Login ke [Railway](https://railway.app) menggunakan akun GitHub.
 2. Klik **New Project** -> pilih **Deploy from GitHub repo** -> pilih repositori bot Anda.
 3. Klik **Deploy Now**.
 
-### 3. Masukkan Variables di Railway
-Buka menu **Variables** pada service Anda di Railway, lalu tambahkan semua konfigurasi dari `.env` lokal Anda satu per satu. 
-Untuk Firebase (karena file `serviceAccountKey.json` tidak di-upload ke Git), Anda cukup membuat **satu variabel** di Railway:
-* `FIREBASE_SERVICE_ACCOUNT`: Copy dan paste **seluruh isi** dari file `serviceAccountKey.json` lokal Anda ke kolom nilai variabel ini (dalam format JSON utuh).
+#### 3. Konfigurasi Variables di Railway
+Buka menu **Variables** pada service Anda di Railway, lalu tambahkan semua konfigurasi dari `.env` lokal Anda satu per satu.
 
-*(Catatan: Alternatifnya, Anda juga tetap bisa memasukkan variabel terpisah seperti `FIREBASE_PROJECT_ID`, `FIREBASE_PRIVATE_KEY` dengan penggantian line-break manual, namun menggunakan `FIREBASE_SERVICE_ACCOUNT` jauh lebih disarankan karena anti-error).*
+Khusus untuk **Firebase (karena `serviceAccountKey.json` di-ignore)**, Anda cukup menambahkan satu variabel ini di panel Railway:
+* **Key:** `FIREBASE_SERVICE_ACCOUNT`
+* **Value:** Copy & paste **seluruh isi** teks dari file `serviceAccountKey.json` lokal Anda (dalam format JSON utuh) ke kolom nilai variabel ini.
 
-### 4. Hubungkan Domain & Set `BASE_URL`
-1. Masuk ke tab **Settings** di Railway Anda, lalu cari bagian **Networking** dan klik **Generate Domain** (contoh: `https://xxx.up.railway.app`).
-2. Masuk kembali ke tab **Variables**, edit/tambahkan variabel **`BASE_URL`** dan isi dengan domain tersebut.
+#### 4. Hubungkan Domain & Set `BASE_URL`
+1. Masuk ke tab **Settings** di Railway, cari bagian **Networking**, lalu klik **Generate Domain** (contoh: `https://xxx.up.railway.app`).
+2. Masuk kembali ke tab **Variables**, edit/tambahkan variabel **`BASE_URL`** dan isi dengan URL domain tersebut.
 
-### 5. Setup Persistent Volume (Wajib agar Cache Akun Tidak Hilang)
+#### 5. Setup Persistent Volume (Penting untuk Cache File Unduhan)
 1. Di dashboard project Railway Anda, klik **+ New** -> pilih **Volume**.
-2. Beri nama volume (misal: `storage-volume`).
-3. Set **Mount Path** ke: `/app/storage`.
-4. Klik **Create**. File cache akun Anda sekarang tersimpan permanen bahkan setelah server restart.
+2. Set **Mount Path** ke: `/app/storage`.
+3. Klik **Create**. File zip pesanan aktif Anda sekarang aman & tersimpan secara persisten bahkan setelah server restart.
 
 ---
 
