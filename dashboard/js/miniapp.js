@@ -86,11 +86,17 @@ function switchTab(tab) {
 
   tg.BackButton.isVisible = false;
 
+  // Stop polling if moving away from upload tab
+  if (tab !== 'upload') {
+    stopSyncStatusPolling();
+  }
+
   if (tab === 'home')     loadHome();
   if (tab === 'orders')   loadOrders();
   if (tab === 'stock')    loadStock();
   if (tab === 'settings') loadPrices();
   if (tab === 'users')    loadUsers();
+  if (tab === 'upload')   startSyncStatusPolling();
 }
 
 // ─── FORMAT HELPERS ───────────────────────────────────────────────────────────
@@ -639,6 +645,7 @@ async function doUpload() {
         showToast(`✅ ${data.uploaded} file berhasil diupload!`);
         document.getElementById('uploadBtn').disabled = false;
         clearFiles();
+        checkUploadStatus(); // Check sync status immediately after upload
       }, 700);
     } else {
       hideOverlay();
@@ -817,6 +824,48 @@ function showToast(msg) {
   el.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+// ─── BACKGROUND SYNC STATUS ──────────────────────────────────────────────────
+let syncStatusInterval = null;
+
+async function checkUploadStatus() {
+  try {
+    const res = await apiFetch('/api/admin/stock/upload-status');
+    if (res.ok) {
+      const data = await res.json();
+      const el = document.getElementById('syncStatus');
+      if (!el) return;
+      if (data.remaining > 0) {
+        el.style.display = 'inline-block';
+        el.innerHTML = `⏳ <b>Sisa upload ke Telegram:</b> ${data.remaining} file...`;
+        el.style.borderColor = 'rgba(234,179,8,0.3)';
+        el.style.color = '#facc15'; // yellow
+        el.style.background = 'rgba(234,179,8,0.05)';
+      } else {
+        el.style.display = 'inline-block';
+        el.innerHTML = `✅ Semua stok tersinkron ke Telegram!`;
+        el.style.borderColor = 'rgba(34,197,94,0.3)';
+        el.style.color = '#4ade80'; // green
+        el.style.background = 'rgba(34,197,94,0.05)';
+      }
+    }
+  } catch (err) {
+    console.error('Failed to fetch sync status:', err);
+  }
+}
+
+function startSyncStatusPolling() {
+  stopSyncStatusPolling();
+  checkUploadStatus();
+  syncStatusInterval = setInterval(checkUploadStatus, 5000);
+}
+
+function stopSyncStatusPolling() {
+  if (syncStatusInterval) {
+    clearInterval(syncStatusInterval);
+    syncStatusInterval = null;
+  }
 }
 
 // ─── START ────────────────────────────────────────────────────────────────────

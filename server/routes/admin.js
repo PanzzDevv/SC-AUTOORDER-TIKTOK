@@ -222,6 +222,19 @@ router.post('/stock/upload', adminAuth, upload.array('files', 500), async (req, 
   }
 });
 
+// Get remaining background uploads status
+router.get('/stock/upload-status', adminAuth, async (req, res) => {
+  try {
+    const snapshot = await db.collection('accounts')
+      .where('status', '==', 'available')
+      .where('telegramFileId', '==', '')
+      .get();
+    res.json({ remaining: snapshot.size });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ─── BACKGROUND UPLOAD WORKER ────────────────────────────────────────────────
 let isUploadingBackground = false;
 async function triggerBackgroundUpload() {
