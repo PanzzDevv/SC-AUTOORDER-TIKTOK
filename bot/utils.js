@@ -18,8 +18,26 @@ function formatRupiah(num) {
  */
 async function editMain(bot, chatId, text, keyboard, msgId = null) {
   const session = getSession(chatId);
-  const targetId = msgId || session.mainMessageId;
-  const isPhoto  = session.mainIsPhoto !== false;
+  let targetId = msgId || session.mainMessageId;
+  let isPhoto  = session.mainIsPhoto;
+
+  // Recovery: jika targetId tidak ada di session, coba ambil dari Firestore
+  if (!targetId) {
+    try {
+      const { getUser } = require('../server/firebase');
+      const user = await getUser(chatId);
+      if (user && user.mainMessageId) {
+        targetId = user.mainMessageId;
+        isPhoto = user.mainIsPhoto !== false;
+        // Simpan kembali ke memory session agar request berikutnya cepat
+        session.mainMessageId = targetId;
+        session.mainIsPhoto = isPhoto;
+        console.log(`🔄 [Self-Healing] Recovered mainMessageId (${targetId}) from Firestore for user ${chatId}`);
+      }
+    } catch (dbErr) {
+      console.error('Failed to recover mainMessageId from Firestore:', dbErr.message);
+    }
+  }
 
   if (!targetId) {
     const m = await bot.sendMessage(chatId, text, {
@@ -28,11 +46,23 @@ async function editMain(bot, chatId, text, keyboard, msgId = null) {
     });
     session.mainMessageId = m.message_id;
     session.mainIsPhoto = false;
+
+    // Simpan ke Firestore untuk pemulihan nanti jika bot restart
+    try {
+      const { db } = require('../server/firebase');
+      await db.collection('users').doc(String(chatId)).update({
+        mainMessageId: m.message_id,
+        mainIsPhoto: false
+      }).catch(() => {});
+    } catch {}
     return;
   }
 
+  // Jika isPhoto belum terdefinisi (misal setelah recover tetapi field di DB tidak ada), asumsikan true
+  const finalIsPhoto = isPhoto !== false;
+
   try {
-    if (isPhoto) {
+    if (finalIsPhoto) {
       await bot.editMessageCaption(text, {
         chat_id: chatId,
         message_id: targetId,
@@ -56,6 +86,13 @@ async function editMain(bot, chatId, text, keyboard, msgId = null) {
       });
       session.mainMessageId = m.message_id;
       session.mainIsPhoto = false;
+
+      // Simpan ke Firestore
+      const { db } = require('../server/firebase');
+      await db.collection('users').doc(String(chatId)).update({
+        mainMessageId: m.message_id,
+        mainIsPhoto: false
+      }).catch(() => {});
     } catch {}
   }
 }

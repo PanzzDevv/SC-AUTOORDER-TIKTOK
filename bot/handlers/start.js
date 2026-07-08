@@ -1,5 +1,5 @@
 require('dotenv').config({ path: require('path').join(__dirname, '../../.env') });
-const { getUserOrCreate } = require('../../server/firebase');
+const { getUserOrCreate, db } = require('../../server/firebase');
 const { getSession } = require('../sessions');
 const { escapeHTML, editMain } = require('../utils');
 const path = require('path');
@@ -129,6 +129,12 @@ async function handleStart(bot, msg) {
 
     session.mainMessageId = photoMsg.message_id;
     session.mainIsPhoto   = true;
+
+    // Simpan ke Firestore untuk pemulihan nanti jika bot restart
+    await db.collection('users').doc(String(chatId)).update({
+      mainMessageId: photoMsg.message_id,
+      mainIsPhoto: true
+    }).catch(() => {});
   } catch (e) {
     console.error('Send message/photo error:', e.message);
     // Fallback if photo fails
@@ -138,6 +144,11 @@ async function handleStart(bot, msg) {
     });
     session.mainMessageId = textMsg.message_id;
     session.mainIsPhoto   = false;
+
+    await db.collection('users').doc(String(chatId)).update({
+      mainMessageId: textMsg.message_id,
+      mainIsPhoto: false
+    }).catch(() => {});
   }
 }
 
@@ -165,6 +176,12 @@ async function handleBackToMenu(bot, chatId, messageId, firstName) {
       
       session.mainMessageId = photoMsg.message_id;
       session.mainIsPhoto   = true;
+
+      // Simpan ke Firestore
+      await db.collection('users').doc(String(chatId)).update({
+        mainMessageId: photoMsg.message_id,
+        mainIsPhoto: true
+      }).catch(() => {});
       return;
     } catch (e) {
       console.error('Failed to restore main menu photo banner:', e.message);
