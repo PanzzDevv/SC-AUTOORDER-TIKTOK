@@ -157,7 +157,7 @@ function getFileHash(filePath) {
   });
 }
 
-// Upload account files ke Telegram Storage
+// Upload account files ke Telegram Storage langsung
 router.post('/stock/upload', adminAuth, upload.array('files', 500), async (req, res) => {
   try {
     const { type, garansi } = req.body;
@@ -168,10 +168,7 @@ router.post('/stock/upload', adminAuth, upload.array('files', 500), async (req, 
     const results = [];
     const errors = [];
 
-    const localAccountsDir = path.join(__dirname, '../../storage/accounts/');
-    if (!fs.existsSync(localAccountsDir)) {
-      fs.mkdirSync(localAccountsDir, { recursive: true });
-    }
+    const { uploadFileToTelegram } = require('../telegramStorage');
 
     for (const file of req.files) {
       try {
@@ -188,26 +185,21 @@ router.post('/stock/upload', adminAuth, upload.array('files', 500), async (req, 
           throw new Error('Duplicate account file detected');
         }
 
-        const uuid = uuidv4();
-        const finalPath = path.join(localAccountsDir, uuid);
+        // Upload langsung ke Telegram Storage
+        const telegramFileId = await uploadFileToTelegram(file.path, file.originalname);
 
-        // Pindahkan file ke folder accounts dengan nama UUID
-        fs.renameSync(file.path, finalPath);
-
-        // Simpan ke Firestore dengan status available, storagePath terisi, dan fileHash terisi
-        const storagePath = `accounts/${uuid}`;
-        await addAccount(type, garansiBool, '', file.originalname, storagePath, fileHash);
+        // Simpan ke Firestore dengan status available, telegramFileId terisi, storagePath kosong
+        await addAccount(type, garansiBool, telegramFileId, file.originalname, '', fileHash);
 
         results.push({ fileName: file.originalname });
       } catch (err) {
         console.error(`Failed to process ${file.originalname}:`, err.message);
         errors.push({ fileName: file.originalname, error: err.message });
+      } finally {
+        // Hapus file temp selalu
         try { fs.unlinkSync(file.path); } catch (_) {}
       }
     }
-
-    // Jalankan upload background secara asynchronous (non-blocking)
-    triggerBackgroundUpload().catch(console.error);
 
     const hasErrors = errors.length > 0;
     res.json({
@@ -224,15 +216,7 @@ router.post('/stock/upload', adminAuth, upload.array('files', 500), async (req, 
 
 // Get remaining background uploads status
 router.get('/stock/upload-status', adminAuth, async (req, res) => {
-  try {
-    const snapshot = await db.collection('accounts')
-      .where('status', '==', 'available')
-      .where('telegramFileId', '==', '')
-      .get();
-    res.json({ remaining: snapshot.size });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  res.json({ remaining: 0 });
 });
 
 // ─── BACKGROUND UPLOAD WORKER ────────────────────────────────────────────────
