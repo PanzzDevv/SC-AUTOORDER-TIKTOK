@@ -317,52 +317,48 @@ async function deliverOrder(bot, orderId) {
 
     const fs = require('fs');
     const path = require('path');
-    const MAX_ZIP_SIZE = 45 * 1024 * 1024; // 45 MB limit per zip for Telegram API
     
-    let chunks = [];
-    let currentChunk = [];
-    let currentSize = 0;
-
-    for (let acc of accounts) {
-      let size = 1024 * 1024; // fallback 1MB
-      if (acc.storagePath) {
-        const sourcePath = path.join(__dirname, '../../storage/', acc.storagePath);
-        if (fs.existsSync(sourcePath)) {
-          size = fs.statSync(sourcePath).size;
-        }
-      }
-      
-      if (currentSize + size > MAX_ZIP_SIZE && currentChunk.length > 0) {
-        chunks.push(currentChunk);
-        currentChunk = [acc];
-        currentSize = size;
-      } else {
-        currentChunk.push(acc);
-        currentSize += size;
-      }
+    // Buat ZIP tunggal berisi seluruh akun
+    const tempZipPath = await createZipFromAccounts(accounts, orderId);
+    
+    // Tentukan path folder downloads publik
+    const destDir = path.join(__dirname, '../../storage/downloads/');
+    if (!fs.existsSync(destDir)) {
+      fs.mkdirSync(destDir, { recursive: true });
     }
-    if (currentChunk.length > 0) chunks.push(currentChunk);
+    
+    const finalZipName = `order_${orderId}.zip`;
+    const finalZipPath = path.join(destDir, finalZipName);
+    
+    // Pindahkan file zip ke folder publik
+    fs.copyFileSync(tempZipPath, finalZipPath);
+    cleanupZip(tempZipPath);
+    
+    // Buat link download
+    const downloadUrl = `${process.env.BASE_URL}/downloads/${finalZipName}`;
+    const adminUsername = process.env.ADMIN_USERNAME || 'panzzstore_admin';
+    
+    const deliveryText = `✅ <b>Order Berhasil!</b>
+    
+<blockquote>📦 <b>${order.qty}x Akun TikTok ${order.type === 'muda' ? 'Muda' : 'Tua'} ${order.garansi ? 'Garansi' : 'No Garansi'}</b>
+🆔 Order ID: <code>${orderId}</code></blockquote>
 
-    let part = 1;
-    for (let chunk of chunks) {
-      const partSuffix = chunks.length > 1 ? `_Part${part}` : '';
-      const zipPath = await createZipFromAccounts(chunk, `${orderId}${partSuffix}`);
-      
-      let caption = '';
-      const adminUsername = process.env.ADMIN_USERNAME || 'panzzstore_admin';
-      if (chunks.length === 1) {
-        caption = `✅ <b>Order Berhasil!</b>\n\n<blockquote>📦 ${order.qty}x Akun TikTok ${order.type === 'muda' ? 'Muda' : 'Tua'} ${order.garansi ? 'Garansi' : 'No Garansi'}\n🆔 Order ID: <code>${orderId}</code></blockquote>\n<i>Terima kasih sudah belanja di ${storeName}! 🙏</i>\n<i>Jika ada masalah, hubungi admin (@${adminUsername}) ya.</i>`;
-      } else {
-        caption = `📦 <b>Part ${part} dari ${chunks.length}</b> (${chunk.length} Akun)\n🆔 <code>${orderId}</code>\n<i>Orderan dipecah jadi beberapa file karena ukuran terlalu besar.</i>`;
-      }
-      
-      await bot.sendDocument(chatId, zipPath, {
-        caption: caption,
-        parse_mode: 'HTML',
-      });
-      cleanupZip(zipPath);
-      part++;
-    }
+Silakan klik tombol di bawah ini untuk mendownload file akun Anda secara langsung:
+<i>⚠️ Link aktif selama 24 jam.</i>
+
+<i>Terima kasih sudah belanja di ${storeName}! 🙏</i>`;
+
+    const inlineKeyboard = {
+      inline_keyboard: [
+        [{ text: '📥 Download File Akun (.zip)', url: downloadUrl }],
+        [{ text: '📞 Hubungi Admin', url: `https://t.me/${adminUsername}` }],
+      ]
+    };
+
+    await bot.sendMessage(chatId, deliveryText, {
+      parse_mode: 'HTML',
+      reply_markup: inlineKeyboard
+    });
 
     bot.deleteMessage(chatId, waitMsg.message_id).catch(() => {});
 
@@ -374,7 +370,7 @@ async function deliverOrder(bot, orderId) {
       const { buildMainKeyboard } = require('./start');
       const user = await getUser(chatId);
       const sisaSaldo = user ? (user.saldo || 0) : 0;
-      const finalCaption = `✅ <b>Order Selesai!</b>\n\n<blockquote>📦 ${order.qty}x Akun TikTok ${order.type === 'muda' ? 'Muda' : 'Tua'} ${order.garansi ? 'Garansi' : 'No Garansi'}\n💰 Total: Rp ${formatRupiah(order.totalPrice)}\n👤 Sisa Saldo: Rp ${formatRupiah(sisaSaldo)}</blockquote>\n🎉 <i>File akun kamu telah dikirim di bawah ini. Silakan unduh.</i>`;
+      const finalCaption = `✅ <b>Order Selesai!</b>\n\n<blockquote>📦 ${order.qty}x Akun TikTok ${order.type === 'muda' ? 'Muda' : 'Tua'} ${order.garansi ? 'Garansi' : 'No Garansi'}\n💰 Total: Rp ${formatRupiah(order.totalPrice)}\n👤 Sisa Saldo: Rp ${formatRupiah(sisaSaldo)}</blockquote>\n🎉 <i>Link download file akun telah terkirim di bawah ini! Silakan klik untuk mengunduh.</i>`;
       await editMain(bot, chatId, finalCaption, buildMainKeyboard(chatId));
     } catch (editMainErr) {
       console.error('Failed to update main banner to final success state:', editMainErr.message);

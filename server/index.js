@@ -38,6 +38,35 @@ function serveHtmlWithStoreName(filePath, extraReplace = null) {
 }
 
 app.use('/dashboard', express.static(path.join(__dirname, '../dashboard'), { index: false }));
+
+// Expose public static downloads folder with auto-cleanup task
+const fs = require('fs');
+const downloadsDir = path.join(__dirname, '../storage/downloads');
+if (!fs.existsSync(downloadsDir)) {
+  fs.mkdirSync(downloadsDir, { recursive: true });
+}
+app.use('/downloads', express.static(downloadsDir));
+
+// Auto-cleanup files older than 24 hours in downloads folder
+setInterval(() => {
+  try {
+    const files = fs.readdirSync(downloadsDir);
+    const now = Date.now();
+    const expiryTime = 24 * 60 * 60 * 1000; // 24 hours
+
+    files.forEach(file => {
+      const filePath = path.join(downloadsDir, file);
+      const stats = fs.statSync(filePath);
+      if (now - stats.mtimeMs > expiryTime) {
+        fs.unlinkSync(filePath);
+        console.log(`🧹 Auto-cleaned old download file: ${file}`);
+      }
+    });
+  } catch (err) {
+    console.error('Auto-cleanup error:', err.message);
+  }
+}, 60 * 60 * 1000); // Check every hour
+
 app.get('/', (req, res) => res.redirect('/miniapp'));
 
 // Serve Mini App (inject ADMIN_IDS so frontend can do local check)

@@ -2,6 +2,7 @@
 node_modules/
 storage/temp-uploads/
 storage/temp-zips/
+storage/downloads/
 *.zip
 serviceAccountKey.json
 serviceAccountKey.json.json

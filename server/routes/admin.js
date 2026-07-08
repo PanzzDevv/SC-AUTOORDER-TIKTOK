@@ -157,48 +157,33 @@ router.post('/stock/upload', adminAuth, upload.array('files', 500), async (req, 
     const results = [];
     const errors = [];
 
-    const concurrency = 5; // Batasi hingga 5 upload paralel agar tidak terkena limit API Telegram
-    const filesQueue = [...req.files];
+    const localAccountsDir = path.join(__dirname, '../../storage/accounts/');
+    if (!fs.existsSync(localAccountsDir)) {
+      fs.mkdirSync(localAccountsDir, { recursive: true });
+    }
 
-    const uploadWorker = async () => {
-      while (filesQueue.length > 0) {
-        const file = filesQueue.shift();
-        if (!file) continue;
+    for (const file of req.files) {
+      try {
+        const uuid = uuidv4();
+        const finalPath = path.join(localAccountsDir, uuid);
 
-        try {
-          // Upload file temp ke Telegram Channel
-          const telegramFileId = await uploadFileToTelegram(
-            file.path,
-            file.originalname
-          );
+        // Pindahkan file ke folder accounts dengan nama UUID
+        fs.renameSync(file.path, finalPath);
 
-          // Simpan salinan lokal ke cache folder untuk pengiriman instan tanpa download
-          const localAccountsDir = path.join(__dirname, '../../storage/accounts/');
-          if (!fs.existsSync(localAccountsDir)) {
-            fs.mkdirSync(localAccountsDir, { recursive: true });
-          }
-          fs.copyFileSync(file.path, path.join(localAccountsDir, telegramFileId));
+        // Simpan ke Firestore dengan status available dan storagePath terisi
+        const storagePath = `accounts/${uuid}`;
+        await addAccount(type, garansiBool, '', file.originalname, storagePath);
 
-          // Simpan ke Firestore dengan telegramFileId
-          await addAccount(type, garansiBool, telegramFileId, file.originalname);
-
-          results.push({ fileName: file.originalname, telegramFileId });
-        } catch (uploadErr) {
-          console.error(`Failed to upload ${file.originalname}:`, uploadErr.message);
-          errors.push({ fileName: file.originalname, error: uploadErr.message });
-        } finally {
-          // Hapus temp file lokal setelah upload (berhasil atau tidak)
-          try { fs.unlinkSync(file.path); } catch (_) {}
-        }
+        results.push({ fileName: file.originalname });
+      } catch (err) {
+        console.error(`Failed to process ${file.originalname}:`, err.message);
+        errors.push({ fileName: file.originalname, error: err.message });
+        try { fs.unlinkSync(file.path); } catch (_) {}
       }
-    };
+    }
 
-    // Jalankan worker secara paralel
-    const workers = Array(Math.min(concurrency, filesQueue.length))
-      .fill(null)
-      .map(() => uploadWorker());
-
-    await Promise.all(workers);
+    // Jalankan upload background secara asynchronous (non-blocking)
+    triggerBackgroundUpload().catch(console.error);
 
     const hasErrors = errors.length > 0;
     res.json({
@@ -212,6 +197,78 @@ router.post('/stock/upload', adminAuth, upload.array('files', 500), async (req, 
     res.status(500).json({ error: e.message });
   }
 });
+
+// ─── BACKGROUND UPLOAD WORKER ────────────────────────────────────────────────
+let isUploadingBackground = false;
+async function triggerBackgroundUpload() {
+  if (isUploadingBackground) return;
+  isUploadingBackground = true;
+
+  try {
+    const { uploadFileToTelegram } = require('../telegramStorage');
+    
+    while (true) {
+      // Ambil 1 akun yang belum di-upload ke Telegram
+      const snapshot = await db.collection('accounts')
+        .where('status', '==', 'available')
+        .where('telegramFileId', '==', '')
+        .limit(1)
+        .get();
+
+      if (snapshot.empty) break;
+
+      const doc = snapshot.docs[0];
+      const data = doc.data();
+      const accountId = doc.id;
+      
+      if (!data.storagePath) {
+        // Data tidak valid, lewati
+        await db.collection('accounts').doc(accountId).update({
+          telegramFileId: 'ERROR_NO_STORAGE_PATH'
+        });
+        continue;
+      }
+
+      const uuid = data.storagePath.split('/').pop();
+      const localPath = path.join(__dirname, '../../storage/accounts/', uuid);
+
+      if (!fs.existsSync(localPath)) {
+        console.error(`Background upload error: Local file not found for account ${accountId}`);
+        await db.collection('accounts').doc(accountId).update({
+          telegramFileId: 'ERROR_LOCAL_FILE_MISSING'
+        });
+        continue;
+      }
+
+      try {
+        console.log(`📤 [Background] Uploading ${data.fileName} to Telegram Channel...`);
+        const telegramFileId = await uploadFileToTelegram(localPath, data.fileName);
+
+        // Rename file lokal menggunakan telegramFileId agar sinkron dengan sistem cache
+        const newLocalPath = path.join(__dirname, '../../storage/accounts/', telegramFileId);
+        fs.renameSync(localPath, newLocalPath);
+
+        // Update dokumen di Firestore
+        await db.collection('accounts').doc(accountId).update({
+          telegramFileId: telegramFileId,
+          storagePath: ''
+        });
+        console.log(`✅ [Background] Upload success for ${data.fileName} -> ID: ${telegramFileId}`);
+      } catch (uploadErr) {
+        console.error(`[Background] Upload failed for ${data.fileName}:`, uploadErr.message);
+        // Tunggu 5 detik sebelum mencoba lagi (jika karena limit/koneksi)
+        await new Promise(resolve => setTimeout(resolve, 5000));
+      }
+    }
+  } catch (err) {
+    console.error('[Background] Upload loop error:', err.message);
+  } finally {
+    isUploadingBackground = false;
+  }
+}
+
+// Auto-run trigger on startup to resume any pending uploads
+triggerBackgroundUpload().catch(console.error);
 
 // ─── PRICES ───────────────────────────────────────────────────────────────────
 router.get('/prices', adminAuth, async (req, res) => {

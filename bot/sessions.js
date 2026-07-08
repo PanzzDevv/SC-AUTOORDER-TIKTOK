@@ -7,7 +7,16 @@ function getSession(chatId) {
 }
 
 function clearSession(chatId) {
-  sessions[chatId] = {};
+  if (sessions[chatId]) {
+    const mainMessageId = sessions[chatId].mainMessageId;
+    const mainIsPhoto = sessions[chatId].mainIsPhoto;
+    sessions[chatId] = {
+      mainMessageId,
+      mainIsPhoto
+    };
+  } else {
+    sessions[chatId] = {};
+  }
 }
 
 module.exports = { sessions, getSession, clearSession };
