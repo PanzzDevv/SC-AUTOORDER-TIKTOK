@@ -5,7 +5,6 @@
   "main": "server/index.js",
   "scripts": {
     "start": "node server/index.js",
-    "bot": "node bot/index.js",
     "dev": "nodemon server/index.js"
   },
   "dependencies": {

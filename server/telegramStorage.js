@@ -18,28 +18,41 @@ function getStorageBot() {
  * @param {string} fileName - Nama file
  * @returns {Promise<string>} telegramFileId
  */
-async function uploadFileToTelegram(filePath, fileName) {
+async function uploadFileToTelegram(filePath, fileName, retries = 5) {
   const channelId = process.env.STORAGE_CHANNEL_ID;
   if (!channelId) {
     throw new Error('STORAGE_CHANNEL_ID belum diset di .env');
   }
 
-  // Upload ke channel
-  const msg = await getStorageBot().sendDocument(channelId, fs.createReadStream(filePath), {
-    caption: `📦 File Account: ${fileName}\n📅 Date: ${new Date().toISOString()}`
-  }, {
-    filename: fileName,
-    contentType: 'application/octet-stream'
-  });
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const msg = await getStorageBot().sendDocument(channelId, fs.createReadStream(filePath), {
+        caption: `📦 File Account: ${fileName}\n📅 Date: ${new Date().toISOString()}`
+      }, {
+        filename: fileName,
+        contentType: 'application/octet-stream'
+      });
 
-  if (!msg.document || !msg.document.file_id) {
-    throw new Error('Gagal mendapatkan file_id dari Telegram');
+      if (!msg.document || !msg.document.file_id) {
+        throw new Error('Gagal mendapatkan file_id dari Telegram');
+      }
+
+      const telegramFileId = msg.document.file_id;
+      console.log(`✅ Telegram Storage Upload: ${fileName} → File ID: ${telegramFileId}`);
+      return telegramFileId;
+    } catch (err) {
+      if (err.message && err.message.includes('429')) {
+        const match = err.message.match(/retry after (\d+)/i);
+        const waitSeconds = match ? parseInt(match[1]) : 10;
+        console.log(`⏳ Limit Telegram (429) untuk ${fileName}. Menunggu ${waitSeconds} detik (Percobaan ${attempt}/${retries})...`);
+        // Tunggu sesuai instruksi Telegram + 1 detik buffer
+        await new Promise(resolve => setTimeout(resolve, (waitSeconds + 1) * 1000));
+      } else {
+        throw err; // Jika bukan 429, langsung throw error
+      }
+    }
   }
-
-  const telegramFileId = msg.document.file_id;
-  console.log(`✅ Telegram Storage Upload: ${fileName} → File ID: ${telegramFileId}`);
-  
-  return telegramFileId;
+  throw new Error(`Gagal upload ${fileName} setelah ${retries} percobaan karena kena limit Telegram terus.`);
 }
 
 /**
