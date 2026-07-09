@@ -352,4 +352,38 @@ router.post('/users/:id/balance', adminAuth, async (req, res) => {
   }
 });
 
+// ─── BROADCAST MESSAGE ────────────────────────────────────────────────────────
+router.post('/broadcast', adminAuth, async (req, res) => {
+  try {
+    const { message } = req.body;
+    if (!message || message.trim() === '') {
+      return res.status(400).json({ error: 'Pesan broadcast tidak boleh kosong' });
+    }
+
+    const botModule = require('../../bot/index');
+    const users = await getAllUsers();
+    
+    let successCount = 0;
+    let failCount = 0;
+
+    // Send broadcast to all users
+    const sendPromises = users.map(async (u) => {
+      try {
+        const uId = String(u.telegramId || u.id);
+        await botModule.bot.sendMessage(uId, message, { parse_mode: 'HTML' });
+        successCount++;
+      } catch (err) {
+        console.error(`Broadcast failed for user ${u.telegramId || u.id}:`, err.message);
+        failCount++;
+      }
+    });
+
+    await Promise.all(sendPromises);
+
+    res.json({ success: true, total: users.length, successCount, failCount });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = router;

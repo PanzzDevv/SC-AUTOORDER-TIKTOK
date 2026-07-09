@@ -350,10 +350,23 @@ async function setUserSaldo(telegramId, newSaldo) {
   });
 }
 
+async function saveHelpTicket(adminMessageId, userId) {
+  await db.collection('help_tickets').doc(String(adminMessageId)).set({
+    userId: String(userId),
+    createdAt: admin.firestore.FieldValue.serverTimestamp()
+  });
+}
+
+async function getUserIdFromHelpTicket(adminMessageId) {
+  const doc = await db.collection('help_tickets').doc(String(adminMessageId)).get();
+  return doc.exists ? doc.data().userId : null;
+}
+
 module.exports = {
   db, admin,
   getUser, createUser, getUserOrCreate, updateUserSaldo, getAllUsers, setUserSaldo,
   getAvailableAccounts, getStockCount, getStockItems, getAllStock, markAccountsSold, addAccount, deleteStockCategory,
   createOrder, getOrder, getOrderByPakasirId, updateOrderStatus, getAllOrders, getOrderStats,
   getPrices, updatePrices, getPriceKey,
+  saveHelpTicket, getUserIdFromHelpTicket,
 };

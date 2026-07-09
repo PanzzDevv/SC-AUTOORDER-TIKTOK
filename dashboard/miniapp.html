@@ -111,6 +111,18 @@
           <div class="skeleton-row"></div>
           <div class="skeleton-row"></div>
         </div>
+
+        <!-- Broadcast Section -->
+        <h2 class="section-title" style="margin-top:1.25rem;">📢 Broadcast Pengumuman</h2>
+        <div class="form-card" style="padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; margin-bottom: 1.5rem;">
+          <p style="font-size: 0.8rem; color: var(--text-muted); margin: 0; line-height: 1.4;">
+            Kirim pengumuman / pesan promosi ke seluruh pengguna terdaftar di bot Telegram Anda. Mendukung tag HTML standar (seperti <code>&lt;b&gt;tebal&lt;/b&gt;</code>, <code>&lt;i&gt;miring&lt;/i&gt;</code>, <code>&lt;code&gt;kode&lt;/code&gt;</code>).
+          </p>
+          <div class="form-group" style="margin: 0;">
+            <textarea id="broadcastMsg" placeholder="Tulis pesan broadcast di sini..." rows="4" style="width: 100%; padding: 0.75rem; border-radius: 12px; border: 1px solid var(--border); background: rgba(255,255,255,0.03); color: #fff; font-family: inherit; font-size: 0.9rem; resize: vertical; box-sizing: border-box; outline: none; transition: border-color 0.25s;" onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'"></textarea>
+          </div>
+          <button class="btn-primary full" onclick="sendBroadcast()" id="btnSendBroadcast" style="margin: 0;">🚀 Kirim Broadcast</button>
+        </div>
       </div>
 
       <!-- ── ORDERS TAB ─────────────────────────────────────────────── -->

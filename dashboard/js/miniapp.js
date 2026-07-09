@@ -816,6 +816,45 @@ async function saveUserSaldo() {
   }
 }
 
+// ─── BROADCAST ────────────────────────────────────────────────────────────────
+async function sendBroadcast() {
+  const msgEl = document.getElementById('broadcastMsg');
+  const btnEl = document.getElementById('btnSendBroadcast');
+  const message = msgEl.value.trim();
+
+  if (!message) {
+    showToast('⚠️ Silakan isi pesan broadcast terlebih dahulu!');
+    return;
+  }
+
+  if (!confirm('Apakah Anda yakin ingin mengirim broadcast ke seluruh user?')) {
+    return;
+  }
+
+  btnEl.disabled = true;
+  btnEl.textContent = '⏳ Mengirim...';
+
+  try {
+    const res = await apiFetch('/api/admin/broadcast', {
+      method: 'POST',
+      body: JSON.stringify({ message }),
+    });
+
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast(`✅ Broadcast terkirim ke ${data.successCount} user!`);
+      msgEl.value = '';
+    } else {
+      showToast(`❌ Gagal: ${data.error || 'Terjadi kesalahan'}`);
+    }
+  } catch (e) {
+    showToast(`❌ Gagal mengirim broadcast: ${e.message}`);
+  } finally {
+    btnEl.disabled = false;
+    btnEl.textContent = '🚀 Kirim Broadcast';
+  }
+}
+
 // ─── TOAST ────────────────────────────────────────────────────────────────────
 let toastTimer;
 function showToast(msg) {

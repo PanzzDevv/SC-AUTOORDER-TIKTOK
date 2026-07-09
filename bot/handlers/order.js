@@ -273,7 +273,7 @@ async function handleTextMessage(bot, msg) {
 
 // ─── DELIVER ORDER (dipanggil setelah payment confirm) ────────────────────────
 async function deliverOrder(bot, orderId) {
-  const { updateUserSaldo } = require('../../server/firebase');
+  const { updateUserSaldo, updateOrderStatus } = require('../../server/firebase');
   const order = await getOrder(orderId);
   if (!order || order.status === 'done') return;
 
@@ -293,6 +293,21 @@ async function deliverOrder(bot, orderId) {
       await bot.sendMessage(chatId, `✅ <b>Top Up Saldo Berhasil!</b>\n\n<blockquote>💵 Saldo berhasil ditambahkan: <b>Rp ${formatRupiah(order.totalPrice)}</b></blockquote>\n<i>Terima kasih telah melakukan top up di ${storeName}! 🙏</i>`, {
         parse_mode: 'HTML',
       });
+
+      // Notify Admin of Top-up
+      const adminTelegramId = process.env.ADMIN_TELEGRAM_ID;
+      if (adminTelegramId) {
+        const adminMessage = `🔔 <b>NOTIFIKASI TRANSAKSI BARU (TOP-UP)</b>\n\n` +
+          `🆔 <b>Order ID:</b> <code>${orderId}</code>\n` +
+          `👤 <b>Pembeli:</b> @${order.username || 'User'} (ID: <code>${order.userId}</code>)\n` +
+          `💵 <b>Nominal Top-Up:</b> Rp ${formatRupiah(order.totalPrice)}\n` +
+          `💳 <b>Metode Pembayaran:</b> Pakasir QRIS\n` +
+          `⏱️ <b>Tanggal:</b> ${new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })}\n\n` +
+          `✅ Status: <b>Saldo berhasil ditambahkan otomatis</b>`;
+        bot.sendMessage(adminTelegramId, adminMessage, { parse_mode: 'HTML' }).catch(err => {
+          console.error('Failed to notify admin on topup:', err.message);
+        });
+      }
     } catch (err) {
       console.error('Topup delivery error:', err.message);
       await bot.sendMessage(chatId, '❌ <b>Gagal menambahkan saldo secara otomatis.</b>\nHubungi admin untuk konfirmasi manual.', {
@@ -373,6 +388,39 @@ Silakan klik tombol di bawah ini untuk mendownload file akun Anda secara langsun
 
     await markAccountsSold(accounts.map(a => a.id));
     await updateOrderStatus(orderId, 'done', { deliveredAt: new Date().toISOString() });
+
+    // Notify Admin of Purchase & Stock Alert Check
+    const adminTelegramId = process.env.ADMIN_TELEGRAM_ID;
+    if (adminTelegramId) {
+      const paymentMethod = order.paymentUrl === 'Paid with Balance' ? 'Potong Saldo' : 'Pakasir QRIS';
+      const adminMessage = `🔔 <b>NOTIFIKASI TRANSAKSI BARU (PEMBELIAN)</b>\n\n` +
+        `🆔 <b>Order ID:</b> <code>${orderId}</code>\n` +
+        `👤 <b>Pembeli:</b> @${order.username || 'User'} (ID: <code>${order.userId}</code>)\n` +
+        `📦 <b>Produk:</b> ${order.qty}x Akun TikTok ${order.type === 'muda' ? 'Muda' : 'Tua'} ${order.garansi ? 'Garansi' : 'No Garansi'}\n` +
+        `💵 <b>Total Pembayaran:</b> Rp ${formatRupiah(order.totalPrice)}\n` +
+        `💳 <b>Metode Pembayaran:</b> ${paymentMethod}\n` +
+        `⏱️ <b>Tanggal:</b> ${new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })}\n\n` +
+        `✅ Status: <b>Sukses dikirim ke pembeli</b>`;
+      bot.sendMessage(adminTelegramId, adminMessage, { parse_mode: 'HTML' }).catch(err => {
+        console.error('Failed to notify admin on purchase:', err.message);
+      });
+
+      // Stock Alert Check
+      try {
+        const remainingStock = await getStockCount(order.type, order.garansi);
+        if (remainingStock < 5) {
+          const stockAlertMessage = `⚠️ <b>PERINGATAN STOK MENIPIS!</b>\n\n` +
+            `📦 <b>Kategori:</b> Akun TikTok ${order.type === 'muda' ? 'Muda' : 'Tua'} ${order.garansi ? 'Garansi' : 'No Garansi'}\n` +
+            `🚨 <b>Sisa Stok:</b> <b>${remainingStock} akun</b>\n\n` +
+            `<i>Silakan segera lakukan pengisian ulang stok akun melalui panel admin!</i>`;
+          bot.sendMessage(adminTelegramId, stockAlertMessage, { parse_mode: 'HTML' }).catch(err => {
+            console.error('Failed to send stock alert:', err.message);
+          });
+        }
+      } catch (stockAlertErr) {
+        console.error('Error checking low stock for alert:', stockAlertErr.message);
+      }
+    }
 
     // Update main banner message to final success state!
     try {

@@ -33,6 +33,62 @@ bot.on('message', async (msg) => {
   const text    = msg.text;
   const session = getSession(chatId);
 
+  // Handle Admin Replies to Help Tickets
+  const adminIds = (process.env.ADMIN_TELEGRAM_ID || '').split(',').map(s => s.trim());
+  if (adminIds.includes(String(chatId)) && msg.reply_to_message) {
+    const { getUserIdFromHelpTicket } = require('../server/firebase');
+    const replyToMsgId = msg.reply_to_message.message_id;
+
+    try {
+      const targetUserId = await getUserIdFromHelpTicket(replyToMsgId);
+      if (targetUserId) {
+        const { escapeHTML } = require('./utils');
+        const userReplyMsg = `💬 <b>Balasan dari Admin:</b>\n\n` +
+          `<blockquote>${escapeHTML(text)}</blockquote>`;
+        
+        await bot.sendMessage(targetUserId, userReplyMsg, { parse_mode: 'HTML' });
+        await bot.sendMessage(chatId, '✅ <b>Balasan berhasil terkirim ke user!</b>', {
+          reply_to_message_id: msg.message_id
+        });
+        return;
+      }
+    } catch (e) {
+      console.error('Error handling admin reply:', e.message);
+    }
+  }
+
+  // State: Waiting for support message (Kirim Pesan ke Admin)
+  if (session.waitingForBantuanMsg) {
+    session.waitingForBantuanMsg = false;
+    const adminTelegramId = adminIds[0]; // Send to the first configured admin ID
+    if (!adminTelegramId) {
+      await bot.sendMessage(chatId, '❌ Fitur bantuan lewat bot belum dikonfigurasi oleh admin.');
+      return;
+    }
+
+    try {
+      const { escapeHTML } = require('./utils');
+      const { saveHelpTicket } = require('../server/firebase');
+
+      // Send to Admin
+      const adminMsg = `📩 <b>PESAN BANTUAN BARU</b>\n\n` +
+        `👤 <b>Dari:</b> @${msg.from.username || '—'} (${msg.from.first_name || 'User'}) (ID: <code>${chatId}</code>)\n` +
+        `💬 <b>Pesan:</b>\n<blockquote>${escapeHTML(text)}</blockquote>\n\n` +
+        `<i>ℹ️ Balas (Reply) pesan ini untuk membalas ke user.</i>`;
+      
+      const sentMsg = await bot.sendMessage(adminTelegramId, adminMsg, { parse_mode: 'HTML' });
+      
+      // Save mapping in Firestore
+      await saveHelpTicket(sentMsg.message_id, chatId);
+
+      await bot.sendMessage(chatId, '✅ <b>Pesan bantuan berhasil dikirim!</b>\nAdmin akan segera membalas ke chat bot ini. Silakan tunggu.', { parse_mode: 'HTML' });
+    } catch (e) {
+      console.error('Failed to process help message:', e.message);
+      await bot.sendMessage(chatId, '❌ Terjadi kesalahan saat mengirim pesan ke admin. Hubungi admin secara manual.');
+    }
+    return;
+  }
+
   // Reply keyboard: ➤ Cek Saldo
   if (text === '➤ Cek Saldo') {
     bot.deleteMessage(chatId, msg.message_id).catch(() => {});
@@ -154,6 +210,17 @@ bot.on('callback_query', async (query) => {
         const amt = parseInt(data.split('_')[2]);
         const { handleProcessTopUp } = require('./handlers/saldo');
         await handleProcessTopUp(bot, chatId, messageId, amt, from);
+        break;
+      }
+
+      case data === 'kirim_pesan_admin': {
+        session.waitingForBantuanMsg = true;
+        await bot.sendMessage(chatId, '💬 <b>Silakan ketik pesan Anda untuk Admin:</b>\n\n<i>Pesan Anda akan otomatis diteruskan ke admin PanzzStore.</i>', {
+          parse_mode: 'HTML',
+          reply_markup: {
+            inline_keyboard: [[{ text: '« Batal', callback_data: 'menu_bantuan' }]]
+          }
+        });
         break;
       }
 

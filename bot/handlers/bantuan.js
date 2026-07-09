@@ -10,12 +10,12 @@ Sebelum menghubungi admin, berikut info cepat yang sering ditanyakan:
 • <b>Kapan dikirim?</b> Akun dikirim otomatis 1-3 detik setelah bayar.
 • <b>Apakah ada garansi?</b> Ya, tersedia opsi Garansi untuk klaim jika bermasalah.
 
-Jika butuh bantuan manual atau laporan transaksi, hubungi admin kami:
-📞 Admin: @${escapeHTML(adminUsername)}`;
+Jika butuh bantuan langsung lewat bot, silakan klik tombol <b>💬 Kirim Pesan ke Admin</b> di bawah ini. Anda bisa menulis pesan dan admin akan membalas langsung ke chat ini.`;
 
   const keyboard = {
     inline_keyboard: [
-      [{ text: '📞 Hubungi Admin', url: `https://t.me/${adminUsername}` }],
+      [{ text: '💬 Kirim Pesan ke Admin', callback_data: 'kirim_pesan_admin' }],
+      [{ text: '📞 Hubungi Telegram Admin', url: `https://t.me/${adminUsername}` }],
       [{ text: '« Menu Utama',   callback_data: 'back_menu' }],
     ],
   };
