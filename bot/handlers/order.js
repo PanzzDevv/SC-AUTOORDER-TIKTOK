@@ -298,13 +298,24 @@ async function deliverOrder(bot, orderId) {
       const adminTelegramId = process.env.ADMIN_TELEGRAM_ID;
       if (adminTelegramId) {
         const adminMessage = `🔔 <b>NOTIFIKASI TRANSAKSI BARU (TOP-UP)</b>\n\n` +
-          `🆔 <b>Order ID:</b> <code>${orderId}</code>\n` +
+          `🆔 <b>Order ID (Pakasir):</b> <code>${order.pakasirOrderId || orderId}</code>\n` +
+          `🆔 <b>Order ID (System):</b> <code>${orderId}</code>\n` +
           `👤 <b>Pembeli:</b> @${order.username || 'User'} (ID: <code>${order.userId}</code>)\n` +
           `💵 <b>Nominal Top-Up:</b> Rp ${formatRupiah(order.totalPrice)}\n` +
           `💳 <b>Metode Pembayaran:</b> Pakasir QRIS\n` +
           `⏱️ <b>Tanggal:</b> ${new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })}\n\n` +
           `✅ Status: <b>Saldo berhasil ditambahkan otomatis</b>`;
-        bot.sendMessage(adminTelegramId, adminMessage, { parse_mode: 'HTML' }).catch(err => {
+
+        const inlineKeyboard = {
+          inline_keyboard: [
+            [
+              { text: '👤 Kelola User', callback_data: `admin_view_user_${order.userId}` },
+              { text: '💬 Kirim Chat', callback_data: `admin_chat_user_${order.userId}` }
+            ]
+          ]
+        };
+
+        bot.sendMessage(adminTelegramId, adminMessage, { parse_mode: 'HTML', reply_markup: inlineKeyboard }).catch(err => {
           console.error('Failed to notify admin on topup:', err.message);
         });
       }
@@ -347,7 +358,10 @@ async function deliverOrder(bot, orderId) {
       fs.mkdirSync(destDir, { recursive: true });
     }
     
-    const finalZipName = `order_${orderId}.zip`;
+    const categoryName = order.type || 'akun';
+    const garansiStatus = order.garansi ? 'garansi' : 'nogaransi';
+    const qtyCount = `${order.qty}x`;
+    const finalZipName = `${categoryName}_${garansiStatus}_${qtyCount}_${orderId}.zip`;
     const finalZipPath = path.join(destDir, finalZipName);
     
     // Pindahkan file zip ke folder publik
@@ -365,7 +379,7 @@ async function deliverOrder(bot, orderId) {
     const deliveryText = `✅ <b>Order Berhasil!</b>
     
 <blockquote>📦 <b>${order.qty}x Akun TikTok ${order.type === 'muda' ? 'Muda' : 'Tua'} ${order.garansi ? 'Garansi' : 'No Garansi'}</b>
-🆔 Order ID: <code>${orderId}</code></blockquote>
+🆔 Order ID: <code>${order.pakasirOrderId || orderId}</code></blockquote>
 
 Silakan klik tombol di bawah ini untuk mendownload file akun Anda secara langsung:
 <i>⚠️ Link aktif selama 24 jam.</i>
@@ -394,14 +408,28 @@ Silakan klik tombol di bawah ini untuk mendownload file akun Anda secara langsun
     if (adminTelegramId) {
       const paymentMethod = order.paymentUrl === 'Paid with Balance' ? 'Potong Saldo' : 'Pakasir QRIS';
       const adminMessage = `🔔 <b>NOTIFIKASI TRANSAKSI BARU (PEMBELIAN)</b>\n\n` +
-        `🆔 <b>Order ID:</b> <code>${orderId}</code>\n` +
+        `🆔 <b>Order ID (Pakasir):</b> <code>${order.pakasirOrderId || orderId}</code>\n` +
+        `🆔 <b>Order ID (System):</b> <code>${orderId}</code>\n` +
         `👤 <b>Pembeli:</b> @${order.username || 'User'} (ID: <code>${order.userId}</code>)\n` +
         `📦 <b>Produk:</b> ${order.qty}x Akun TikTok ${order.type === 'muda' ? 'Muda' : 'Tua'} ${order.garansi ? 'Garansi' : 'No Garansi'}\n` +
         `💵 <b>Total Pembayaran:</b> Rp ${formatRupiah(order.totalPrice)}\n` +
         `💳 <b>Metode Pembayaran:</b> ${paymentMethod}\n` +
         `⏱️ <b>Tanggal:</b> ${new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })}\n\n` +
         `✅ Status: <b>Sukses dikirim ke pembeli</b>`;
-      bot.sendMessage(adminTelegramId, adminMessage, { parse_mode: 'HTML' }).catch(err => {
+
+      const inlineKeyboard = {
+        inline_keyboard: [
+          [
+            { text: '👤 Kelola User', callback_data: `admin_view_user_${order.userId}` },
+            { text: '💬 Kirim Chat', callback_data: `admin_chat_user_${order.userId}` }
+          ],
+          [
+            { text: '📦 Detail Order', callback_data: `admin_view_order_${orderId}` }
+          ]
+        ]
+      };
+
+      bot.sendMessage(adminTelegramId, adminMessage, { parse_mode: 'HTML', reply_markup: inlineKeyboard }).catch(err => {
         console.error('Failed to notify admin on purchase:', err.message);
       });
 
