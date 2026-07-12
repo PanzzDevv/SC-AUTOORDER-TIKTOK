@@ -47,25 +47,27 @@ if (!fs.existsSync(downloadsDir)) {
 }
 app.use('/downloads', express.static(downloadsDir));
 
-// Auto-cleanup files older than 24 hours in downloads folder
-setInterval(() => {
-  try {
-    const files = fs.readdirSync(downloadsDir);
-    const now = Date.now();
-    const expiryTime = 24 * 60 * 60 * 1000; // 24 hours
+// Auto-cleanup files older than 24 hours in downloads folder (hanya dijalankan jika bukan di Vercel)
+if (process.env.VERCEL !== '1') {
+  setInterval(() => {
+    try {
+      const files = fs.readdirSync(downloadsDir);
+      const now = Date.now();
+      const expiryTime = 24 * 60 * 60 * 1000; // 24 hours
 
-    files.forEach(file => {
-      const filePath = path.join(downloadsDir, file);
-      const stats = fs.statSync(filePath);
-      if (now - stats.mtimeMs > expiryTime) {
-        fs.unlinkSync(filePath);
-        console.log(`🧹 Auto-cleaned old download file: ${file}`);
-      }
-    });
-  } catch (err) {
-    console.error('Auto-cleanup error:', err.message);
-  }
-}, 60 * 60 * 1000); // Check every hour
+      files.forEach(file => {
+        const filePath = path.join(downloadsDir, file);
+        const stats = fs.statSync(filePath);
+        if (now - stats.mtimeMs > expiryTime) {
+          fs.unlinkSync(filePath);
+          console.log(`🧹 Auto-cleaned old download file: ${file}`);
+        }
+      });
+    } catch (err) {
+      console.error('Auto-cleanup error:', err.message);
+    }
+  }, 60 * 60 * 1000); // Check every hour
+}
 
 app.get('/', (req, res) => res.redirect('/miniapp'));
 
@@ -80,6 +82,31 @@ app.get('/miniapp', serveHtmlWithStoreName(path.join(__dirname, '../dashboard/mi
 // ─── START BOT ────────────────────────────────────────────────────────────────
 const { bot } = require('../bot/index');
 setBotInstance(bot);
+
+// Setup Telegram Webhook otomatis saat berjalan di Vercel
+if (process.env.VERCEL === '1') {
+  const baseUrl = process.env.BASE_URL;
+  if (baseUrl) {
+    let formattedBaseUrl = baseUrl.trim();
+    if (!formattedBaseUrl.startsWith('http://') && !formattedBaseUrl.startsWith('https://')) {
+      formattedBaseUrl = `https://${formattedBaseUrl}`;
+    }
+    const webhookUrl = `${formattedBaseUrl}/webhook/telegram`;
+    bot.getWebhookInfo().then(info => {
+      if (info.url !== webhookUrl) {
+        bot.setWebHook(webhookUrl)
+          .then(() => console.log(`🛰️ Webhook Telegram set to: ${webhookUrl}`))
+          .catch(err => console.error('❌ Gagal set Telegram Webhook:', err.message));
+      } else {
+        console.log(`🛰️ Webhook Telegram sudah sesuai: ${webhookUrl}`);
+      }
+    }).catch(err => {
+      console.error('❌ Gagal membaca Webhook Info dari Telegram:', err.message);
+    });
+  } else {
+    console.warn('⚠️ VERCEL=1 terdeteksi tetapi BASE_URL belum diset di environment variables. Webhook Telegram gagal di-setup otomatis.');
+  }
+}
 
 // ─── START SERVER ─────────────────────────────────────────────────────────────
 app.listen(PORT, () => {

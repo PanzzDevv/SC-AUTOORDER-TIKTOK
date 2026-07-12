@@ -357,28 +357,39 @@ async function deliverOrder(bot, orderId) {
     // Buat ZIP tunggal berisi seluruh akun
     const tempZipPath = await createZipFromAccounts(accounts, orderId);
     
-    // Tentukan path folder downloads publik
-    const destDir = path.join(__dirname, '../../storage/downloads/');
-    if (!fs.existsSync(destDir)) {
-      fs.mkdirSync(destDir, { recursive: true });
-    }
-    
     const categoryName = order.type || 'akun';
     const garansiStatus = order.garansi ? 'garansi' : 'nogaransi';
     const qtyCount = `${order.qty}x`;
     const finalZipName = `${categoryName}_${garansiStatus}_${qtyCount}_${orderId}.zip`;
-    const finalZipPath = path.join(destDir, finalZipName);
     
-    // Pindahkan file zip ke folder publik
-    fs.copyFileSync(tempZipPath, finalZipPath);
-    cleanupZip(tempZipPath);
-    
-    // Buat link download
-    let baseUrl = process.env.BASE_URL || '';
-    if (baseUrl && !baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
-      baseUrl = `https://${baseUrl}`;
+    let downloadUrl;
+    const isVercel = process.env.VERCEL === '1';
+
+    if (isVercel || process.env.USE_FIREBASE_STORAGE === 'true') {
+      console.log('☁️ Mengunggah file ZIP ke Firebase Storage...');
+      const { uploadFileToStorage } = require('../../server/firebase');
+      downloadUrl = await uploadFileToStorage(tempZipPath, `downloads/${finalZipName}`);
+      cleanupZip(tempZipPath);
+      console.log('☁️ Upload berhasil. URL:', downloadUrl);
+    } else {
+      // Tentukan path folder downloads publik (Lokal VPS)
+      const destDir = path.join(__dirname, '../../storage/downloads/');
+      if (!fs.existsSync(destDir)) {
+        fs.mkdirSync(destDir, { recursive: true });
+      }
+      const finalZipPath = path.join(destDir, finalZipName);
+      
+      // Pindahkan file zip ke folder publik
+      fs.copyFileSync(tempZipPath, finalZipPath);
+      cleanupZip(tempZipPath);
+      
+      // Buat link download
+      let baseUrl = process.env.BASE_URL || '';
+      if (baseUrl && !baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
+        baseUrl = `https://${baseUrl}`;
+      }
+      downloadUrl = `${baseUrl}/downloads/${finalZipName}`;
     }
-    const downloadUrl = `${baseUrl}/downloads/${finalZipName}`;
     const adminUsername = process.env.ADMIN_USERNAME || 'panzzstore_admin';
     
     const deliveryText = `✅ <b>Order Berhasil!</b>

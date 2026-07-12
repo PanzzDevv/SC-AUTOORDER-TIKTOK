@@ -45,4 +45,17 @@ router.post('/pakasir', async (req, res) => {
   }
 });
 
+// POST /webhook/telegram - Mendengarkan update dari Telegram (Webhook mode)
+router.post('/telegram', async (req, res) => {
+  try {
+    if (botInstance) {
+      botInstance.processUpdate(req.body);
+    }
+    res.sendStatus(200);
+  } catch (err) {
+    console.error('Telegram Webhook Route Error:', err.message);
+    res.sendStatus(500);
+  }
+});
+
 module.exports = { router, setBotInstance };

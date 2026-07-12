@@ -40,8 +40,12 @@ if (!serviceAccount) {
 }
 
 if (!admin.apps.length) {
+  const projectId = serviceAccount.project_id || process.env.FIREBASE_PROJECT_ID;
+  const storageBucket = process.env.FIREBASE_STORAGE_BUCKET || (projectId ? `${projectId}.appspot.com` : undefined);
+  
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
+    storageBucket: storageBucket,
   });
 }
 
@@ -377,6 +381,35 @@ async function getUserIdFromHelpTicket(adminMessageId) {
   return doc.exists ? doc.data().userId : null;
 }
 
+/**
+ * Upload a local file to Firebase Storage and get a signed download URL (valid for 24h).
+ * @param {string} localFilePath - Path of the file on local disk
+ * @param {string} destinationPath - Path of the file in the bucket (e.g. 'downloads/order_123.zip')
+ * @returns {Promise<string>} Signed download URL
+ */
+async function uploadFileToStorage(localFilePath, destinationPath) {
+  try {
+    const bucket = admin.storage().bucket();
+    await bucket.upload(localFilePath, {
+      destination: destinationPath,
+      metadata: {
+        cacheControl: 'public, max-age=31536000',
+      }
+    });
+
+    const file = bucket.file(destinationPath);
+    const [url] = await file.getSignedUrl({
+      action: 'read',
+      expires: Date.now() + 24 * 60 * 60 * 1000 // 24 hours
+    });
+
+    return url;
+  } catch (err) {
+    console.error('Firebase Storage upload error:', err.message);
+    throw new Error('Gagal mengunggah ke Firebase Storage: ' + err.message);
+  }
+}
+
 module.exports = {
   db, admin,
   getUser, getUserByUsername, createUser, getUserOrCreate, updateUserSaldo, getAllUsers, setUserSaldo,
@@ -384,4 +417,5 @@ module.exports = {
   createOrder, getOrder, getOrderByPakasirId, updateOrderStatus, getAllOrders, getOrderStats,
   getPrices, updatePrices, getPriceKey,
   saveHelpTicket, getUserIdFromHelpTicket,
+  uploadFileToStorage,
 };

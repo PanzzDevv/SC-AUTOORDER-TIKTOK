@@ -12,8 +12,12 @@ const {
 } = require('../firebase');
 const { uploadFileToTelegram } = require('../telegramStorage');
 
+const os = require('os');
+
 // Ensure temp upload directory exists
-const tempUploadDir = path.join(__dirname, '../../storage/temp-uploads/');
+const tempUploadDir = process.env.VERCEL === '1'
+  ? path.join(os.tmpdir(), 'panzzstore-uploads')
+  : path.join(__dirname, '../../storage/temp-uploads/');
 if (!fs.existsSync(tempUploadDir)) {
   fs.mkdirSync(tempUploadDir, { recursive: true });
 }
