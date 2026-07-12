@@ -616,50 +616,61 @@ function clearFiles() {
 async function doUpload() {
   if (!selectedFiles.length) return;
 
-  const formData = new FormData();
-  formData.append('type', selectedType);
-  formData.append('garansi', selectedGaransi);
-  selectedFiles.forEach(f => formData.append('files', f));
-
   document.getElementById('uploadBtn').disabled = true;
-  setOverlay('Mengupload ke Server', 'Sedang mengirim data, mohon tunggu...', 0);
+  
+  let successCount = 0;
+  let failCount = 0;
+  const errors = [];
 
-  let prog = 0;
-  const interval = setInterval(() => {
-    prog = Math.min(prog + 5, 90);
-    setOverlay('Mengupload ke Server', 'Proses upload sedang berjalan...', prog);
-  }, 200);
+  setOverlay('Mengupload Akun', `Mempersiapkan upload (0/${selectedFiles.length})...`, 0);
 
   try {
-    const res = await fetch('/api/admin/stock/upload', {
-      method: 'POST',
-      headers: {
-        'x-admin-token': window._adminToken || '',
-        'x-tg-init-data': initData || '',
-      },
-      body: formData,
-    });
-    const data = await res.json();
-    clearInterval(interval);
+    for (let i = 0; i < selectedFiles.length; i++) {
+      const file = selectedFiles[i];
+      const progressPercent = Math.round((i / selectedFiles.length) * 100);
+      setOverlay('Mengupload Akun', `Mengupload ${file.name} (${i + 1}/${selectedFiles.length})...`, progressPercent);
+
+      const formData = new FormData();
+      formData.append('type', selectedType);
+      formData.append('garansi', selectedGaransi);
+      formData.append('files', file);
+
+      const res = await fetch('/api/admin/stock/upload', {
+        method: 'POST',
+        headers: {
+          'x-admin-token': window._adminToken || '',
+          'x-tg-init-data': initData || '',
+        },
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        successCount += data.uploaded || 1;
+      } else {
+        failCount++;
+        errors.push(`${file.name}: ${data.error || 'gagal'}`);
+      }
+    }
+
     setOverlay('Selesai!', 'Menyimpan konfigurasi...', 100);
 
-    if (data.success) {
-      setTimeout(() => {
-        hideOverlay();
-        showToast(`✅ ${data.uploaded} file berhasil diupload!`);
-        document.getElementById('uploadBtn').disabled = false;
-        clearFiles();
-        checkUploadStatus(); // Check sync status immediately after upload
-      }, 700);
-    } else {
+    setTimeout(() => {
       hideOverlay();
-      showToast('❌ Upload gagal: ' + (data.error || ''));
+      if (successCount > 0) {
+        showToast(`✅ ${successCount} file berhasil diupload!`);
+      }
+      if (failCount > 0) {
+        showToast(`❌ ${failCount} file gagal diupload: ${errors.join(', ')}`);
+      }
       document.getElementById('uploadBtn').disabled = false;
-    }
-  } catch {
-    clearInterval(interval);
+      clearFiles();
+      checkUploadStatus(); // Check sync status immediately after upload
+    }, 700);
+
+  } catch (err) {
     hideOverlay();
-    showToast('❌ Terjadi kesalahan saat upload.');
+    showToast('❌ Terjadi kesalahan saat upload: ' + err.message);
     document.getElementById('uploadBtn').disabled = false;
   }
 }

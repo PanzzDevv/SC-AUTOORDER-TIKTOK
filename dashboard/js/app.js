@@ -223,44 +223,56 @@ async function doUpload() {
   const type = document.getElementById('uploadType').value;
   const garansi = document.getElementById('uploadGaransi').value;
 
-  const formData = new FormData();
-  formData.append('type', type);
-  formData.append('garansi', garansi);
-  selectedFiles.forEach(f => formData.append('files', f));
-
   document.getElementById('uploadProgress').style.display = 'block';
   document.getElementById('uploadBtn').disabled = true;
 
-  // Simulate progress (real progress would need XMLHttpRequest)
-  let prog = 0;
-  const interval = setInterval(() => {
-    prog = Math.min(prog + 10, 90);
-    document.getElementById('uploadProgressBar').style.width = prog + '%';
-  }, 200);
+  let successCount = 0;
+  let failCount = 0;
+  const errors = [];
 
   try {
-    const res = await fetch(API('/stock/upload'), {
-      method: 'POST',
-      headers: { 'x-admin-token': token },
-      body: formData,
-    });
-    const data = await res.json();
-    clearInterval(interval);
+    for (let i = 0; i < selectedFiles.length; i++) {
+      const file = selectedFiles[i];
+      const progressPercent = Math.round((i / selectedFiles.length) * 100);
+      document.getElementById('uploadProgressBar').style.width = progressPercent + '%';
+
+      const formData = new FormData();
+      formData.append('type', type);
+      formData.append('garansi', garansi);
+      formData.append('files', file);
+
+      const res = await fetch(API('/stock/upload'), {
+        method: 'POST',
+        headers: { 'x-admin-token': token },
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        successCount += data.uploaded || 1;
+      } else {
+        failCount++;
+        errors.push(`${file.name}: ${data.error || 'gagal'}`);
+      }
+    }
+
     document.getElementById('uploadProgressBar').style.width = '100%';
 
-    if (data.success) {
-      showToast(`✅ Berhasil upload ${data.uploaded} file akun!`, 'success');
-      setTimeout(() => {
-        document.getElementById('uploadProgress').style.display = 'none';
-        document.getElementById('uploadProgressBar').style.width = '0%';
-        document.getElementById('uploadBtn').disabled = false;
-        clearUpload();
-      }, 800);
-    } else {
-      showToast('❌ Upload gagal: ' + (data.error || 'Unknown error'), 'error');
+    if (successCount > 0) {
+      showToast(`✅ Berhasil upload ${successCount} file akun!`, 'success');
     }
+    if (failCount > 0) {
+      showToast(`❌ ${failCount} file gagal diupload: ${errors.join(', ')}`, 'error');
+    }
+
+    setTimeout(() => {
+      document.getElementById('uploadProgress').style.display = 'none';
+      document.getElementById('uploadProgressBar').style.width = '0%';
+      document.getElementById('uploadBtn').disabled = false;
+      clearUpload();
+    }, 800);
+
   } catch {
-    clearInterval(interval);
     showToast('❌ Terjadi kesalahan saat upload.', 'error');
     document.getElementById('uploadBtn').disabled = false;
   }
