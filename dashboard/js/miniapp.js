@@ -328,7 +328,7 @@ function showOrderDetail(orderId) {
   const order = allOrders.find(o => o.id === orderId);
   if (!order) return;
 
-  const typeName = order.type === 'muda' ? '🧒 Akun Muda' : '👴 Akun Tua';
+  const typeName = order.type === 'muda' ? '🧒 Akun Tiktok x Line' : '👴 Akun Tiktok x Gsuite';
   const garansiName = order.garansi ? '✅ Garansi' : '❌ No Garansi';
 
   const canConfirm = order.status === 'pending' || order.status === 'paid';

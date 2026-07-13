@@ -580,7 +580,7 @@ bot.on('callback_query', async (query) => {
             await bot.sendMessage(chatId, '❌ Pesanan tidak ditemukan.');
             break;
           }
-          const typeName = order.type === 'muda' ? '🧒 Akun Muda' : '👴 Akun Tua';
+          const typeName = order.type === 'muda' ? '🧒 Akun Tiktok x Line' : '👴 Akun Tiktok x Gsuite';
           const garansiName = order.garansi ? '✅ Garansi' : '❌ No Garansi';
           const paymentMethod = order.paymentUrl === 'Paid with Balance' ? 'Potong Saldo' : 'Pakasir QRIS';
           const dateStr = order.createdAt ? (order.createdAt.toDate ? order.createdAt.toDate().toLocaleString('id-ID') : new Date(order.createdAt).toLocaleString('id-ID')) : '—';

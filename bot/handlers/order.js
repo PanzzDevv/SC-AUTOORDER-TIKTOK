@@ -45,19 +45,19 @@ async function handleBeli(bot, chatId, messageId) {
 
   const text = `🛒 <b>Pilih Kategori Akun TikTok</b>
 
-Silakan pilih kategori umur akun yang Anda butuhkan:
+Silakan pilih kategori akun yang Anda butuhkan:
 
-• 🧒 <b>Akun Muda</b> (Fresh / Baru)
+• 🧒 <b>Akun Tiktok x Line</b> (Fresh / Baru)
 Stok saat ini: <b>Garansi (${mg})</b> | <b>No Garansi (${mn})</b>
 
-• 👴 <b>Akun Tua</b> (Berumur / Kuat)
+• 👴 <b>Akun Tiktok x Gsuite</b> (Berumur / Kuat)
 Stok saat ini: <b>Garansi (${tg})</b> | <b>No Garansi (${tn})</b>`;
 
   const keyboard = {
     inline_keyboard: [
       [
-        { text: '❯ Akun Muda', callback_data: 'type_muda' },
-        { text: '❯ Akun Tua',  callback_data: 'type_tua'  },
+        { text: '❯ Akun Tiktok x Line', callback_data: 'type_muda' },
+        { text: '❯ Akun Tiktok x Gsuite',  callback_data: 'type_tua'  },
       ],
       [{ text: '« Kembali', callback_data: 'back_menu' }],
     ],
@@ -69,7 +69,7 @@ Stok saat ini: <b>Garansi (${tg})</b> | <b>No Garansi (${tn})</b>`;
 // ─── STEP 2: Pilih garansi ────────────────────────────────────────────────────
 async function handleSelectType(bot, chatId, messageId, type) {
   getSession(chatId).type = type;
-  const typeName = type === 'muda' ? 'Akun Muda' : 'Akun Tua';
+  const typeName = type === 'muda' ? 'Akun Tiktok x Line' : 'Akun Tiktok x Gsuite';
 
   const prices = await getPrices();
   const pG  = prices[getPriceKey(type, true)];
@@ -113,7 +113,7 @@ async function handleSelectGaransi(bot, chatId, messageId, garansi) {
   const stock  = await getStockCount(session.type, garansi);
   session.pricePerUnit = price;
 
-  const typeName    = session.type === 'muda' ? 'Akun Muda' : 'Akun Tua';
+  const typeName    = session.type === 'muda' ? 'Akun Tiktok x Line' : 'Akun Tiktok x Gsuite';
   const garansiName = garansi ? '✅ Garansi' : '❌ No Garansi';
 
   const text = `📦 <b>${typeName} — ${garansiName}</b>
@@ -146,7 +146,7 @@ async function handleQtySelected(bot, chatId, messageId, qty) {
   const total       = pricePerUnit * qty;
   session.totalPrice = total;
 
-  const typeName    = type === 'muda' ? 'Akun Muda' : 'Akun Tua';
+  const typeName    = type === 'muda' ? 'Akun Tiktok x Line' : 'Akun Tiktok x Gsuite';
   const garansiName = garansi ? '✅ Garansi' : '❌ No Garansi';
 
   // Ambil saldo user untuk konfirmasi pembayaran
@@ -201,7 +201,7 @@ async function handleConfirmOrder(bot, chatId, messageId, from) {
     );
     session.orderId = order.id;
 
-    const typeName    = type === 'muda' ? 'Akun Muda' : 'Akun Tua';
+    const typeName    = type === 'muda' ? 'Akun Tiktok x Line' : 'Akun Tiktok x Gsuite';
     const garansiName = garansi ? 'Garansi' : 'No Garansi';
 
     const text = `💳 <b>Detail Pembayaran QRIS (Pakasir)</b>
